@@ -1,19 +1,50 @@
 
 import express, { Request, Response } from "express";
-import { initializeApp, cert, getApps } from "firebase-admin/app";
+import cors from "cors";
+
+import {
+  initializeApp,
+  cert,
+  getApps,
+} from "firebase-admin/app";
+
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
 
 const PORT = Number(process.env.PORT || 10000);
+
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
 const SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
 const MODEL_API_URL = process.env.RESEARCH_MODEL_API_URL;
 const MODEL_API_KEY = process.env.RESEARCH_MODEL_API_KEY;
 
 const ALLOWED_ROLES = ["FARMER", "FARM_MANAGER"];
+
+const ALLOWED_ORIGINS = [
+  "https://agri-sense-sand-nine.vercel.app",
+  "http://localhost:5173",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Origin not allowed by CORS."));
+      }
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
+    optionsSuccessStatus: 204,
+  })
+);
+
+app.use(express.json({ limit: "1mb" }));
 
 if (!PROJECT_ID || !SERVICE_ACCOUNT_JSON) {
   throw new Error("Firebase environment configuration is missing.");
@@ -29,7 +60,9 @@ try {
 
 if (!getApps().length) {
   initializeApp({
-    credential: cert(serviceAccount as Parameters<typeof cert>[0]),
+    credential: cert(
+      serviceAccount as Parameters<typeof cert>[0]
+    ),
     projectId: PROJECT_ID,
   });
 }
@@ -37,10 +70,15 @@ if (!getApps().length) {
 const auth = getAuth();
 const db = getFirestore();
 
+// Health check
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ready", service: "agrisense-auth-api" });
+  res.json({
+    status: "ready",
+    service: "agrisense-auth-api",
+  });
 });
 
+// BCTB prediction endpoint
 app.post(
   "/api/predictResearchBctb",
   async (req: Request, res: Response): Promise<void> => {
@@ -48,7 +86,9 @@ app.post(
       const authorization = req.headers.authorization;
 
       if (!authorization?.startsWith("Bearer ")) {
-        res.status(401).json({ error: "Sign in to use this service." });
+        res.status(401).json({
+          error: "Sign in to use this service.",
+        });
         return;
       }
 
@@ -111,13 +151,20 @@ app.post(
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      const timeout = setTimeout(
+        () => controller.abort(),
+        45000
+      );
 
       try {
         const upstreamUrl = new URL("/predict", MODEL_API_URL);
 
         if (includeCounterfactual === false) {
-          upstreamUrl.searchParams.set("include_counterfactual", "false");
+          upstreamUrl.searchParams.set(
+            "include_counterfactual",
+            "false"
+          );
         }
 
         const upstream = await fetch(upstreamUrl, {
@@ -139,7 +186,9 @@ app.post(
         try {
           result = JSON.parse(responseText);
         } catch {
-          result = { error: "Invalid response from prediction service." };
+          result = {
+            error: "Invalid response from prediction service.",
+          };
         }
 
         res.status(upstream.status).json(result);
@@ -149,13 +198,18 @@ app.post(
     } catch (error) {
       console.error("Prediction API error:", error);
 
-      res.status(503).json({
-        error: "The prediction service is temporarily unavailable.",
-      });
+      if (!res.headersSent) {
+        res.status(503).json({
+          error: "The prediction service is temporarily unavailable.",
+        });
+      }
     }
   }
 );
 
+// Start server
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`AgriSense authentication API listening on port ${PORT}`);
+  console.log(
+    `AgriSense authentication API listening on port ${PORT}`
+  );
 });
