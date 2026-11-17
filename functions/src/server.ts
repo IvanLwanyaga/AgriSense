@@ -11,6 +11,8 @@ import {
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+import { createOtpRouter } from "./otpRoutes.js";
+
 const app = express();
 
 const PORT = Number(process.env.PORT || 10000);
@@ -77,6 +79,9 @@ app.get("/health", (_req: Request, res: Response) => {
     service: "agrisense-auth-api",
   });
 });
+
+// Email verification and registration email-change endpoints
+app.use("/", createOtpRouter(auth, db));
 
 // BCTB prediction endpoint
 app.post(
