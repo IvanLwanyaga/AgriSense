@@ -1,0 +1,51 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function canReadReferralPhoto(farmerId, assessmentId) {
+      let profile = firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+      let referralId = 'followup_' + assessmentId;
+      let referral = firestore.get(
+        /databases/(default)/documents/followUps/$(referralId)
+      ).data;
+      return request.auth != null
+        && profile.status == 'ACTIVE'
+        && referral.farmerId == farmerId
+        && referral.followUpConsent == true
+        && (
+          profile.role == 'PLATFORM_ADMIN'
+          || (
+            profile.role == 'AGRICULTURAL_OFFICER'
+            && (
+              profile.assignedDistrict == referral.district
+              || (
+                'assignedDistricts' in profile
+                && profile.assignedDistricts.hasAny([referral.district])
+              )
+            )
+          )
+        );
+    }
+
+    match /bctb_reference_photos/{farmerId}/{assessmentId}/{fileName} {
+      allow read: if request.auth != null
+        && (
+          request.auth.uid == farmerId
+          || canReadReferralPhoto(farmerId, assessmentId)
+        );
+      allow write: if request.auth != null
+        && request.auth.uid == farmerId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    match /bctb_inspection_photos/{officerId}/{caseId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == officerId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+  }
+}

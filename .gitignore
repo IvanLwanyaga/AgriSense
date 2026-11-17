@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.firebase/
+.env
+.env.*
+!.env.example
+functions/lib
+
+# Locally indexed manuals, vectors, optional model weights, and training runs
+AgriSense_BCTB_Data_Retrieval/ml/chroma/
+AgriSense_BCTB_Data_Retrieval/ml/documents/
+AgriSense_BCTB_Data_Retrieval/ml/models/optional/
+AgriSense_BCTB_Data_Retrieval/ml/runs/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Python environments
+.venv/
+venv/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+**/serviceAccountKey.json
+**/*service-account*.json
+**/*serviceAccount*.json
+**/secrets/
+**/.secrets/
+

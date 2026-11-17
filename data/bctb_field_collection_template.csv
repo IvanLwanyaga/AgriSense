@@ -1,0 +1,5 @@
+record_id,observation_date,district,sub_county,farmer_id,farm_acreage,coffee_variety,coffee_age_category,shade_canopy_level,pin_sized_holes_present,twig_blackening_present,wilting_drying_present,leaf_yellowing_present,affected_twig_count_sampled,increasing_twig_damage,previous_bctb_history,affected_twig_removal_practice,farm_sanitation_level,dry_spell_days_14d,rainfall_deficit_30d_mm,rule_engine_risk_score,rule_engine_risk_level,extension_verification_status,verified_bctb_presence,officer_id,data_quality_label,academic_use_disclaimer
+FIELD_REC_0001,2026-09-01,Mukono,Kyampisi,FARMER_001,2.5,ROBUSTA_CWDr_CLONAL,MATURE_3_TO_15,MODERATE,1,1,1,1,14,1,1,INCONSISTENT,POOR,16,14.5,85,HIGH,VISITED,CONFIRMED_BCTB,OFFICER_01,GOOD,NARO_CODA_FIELD_STANDARDS
+FIELD_REC_0002,2026-09-02,Wakiso,Namayumba,FARMER_002,1.2,ROBUSTA_TRADITIONAL,OLD_OVER_15,DENSE,1,1,1,0,8,1,1,NONE,FAIR,12,32.0,72,HIGH,VISITED,CONFIRMED_BCTB,OFFICER_02,GOOD,NARO_CODA_FIELD_STANDARDS
+FIELD_REC_0003,2026-09-03,Luweero,Zirobwe,FARMER_003,3.0,ROBUSTA_MIXED,MATURE_3_TO_15,MODERATE,0,0,1,1,3,0,0,CONSISTENT,GOOD,5,65.0,25,LOW,PENDING,UNCONFIRMED,OFFICER_03,GOOD,NARO_CODA_FIELD_STANDARDS
+

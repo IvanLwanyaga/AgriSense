@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title description">
+  <title id="title">AgriSense-BCTB visual system architecture</title>
+  <desc id="description">Architecture diagram showing the farmer's browser application, Firebase services, the Python research model API, prediction results, and the synthetic model training pipeline.</desc>
+  <defs>
+    <linearGradient id="header" x1="0" x2="1">
+      <stop offset="0" stop-color="#183d2c"/>
+      <stop offset="1" stop-color="#387550"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#173523" flood-opacity=".10"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#43845f"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#3275a8"/>
+    </marker>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #25372d; }
+      .title { font-size: 34px; font-weight: 700; fill: #fff; }
+      .subtitle { font-size: 16px; fill: #dcebe0; }
+      .section { font-size: 19px; font-weight: 700; }
+      .heading { font-size: 16px; font-weight: 700; }
+      .body { font-size: 14px; fill: #53665a; }
+      .small { font-size: 12px; fill: #66776c; }
+      .pill { font-size: 12px; font-weight: 700; }
+      .white { fill: #fff; }
+    </style>
+  </defs>
+
+  <image href="public/images/robusta-green-cherries.jpg" x="0" y="0" width="1600" height="1100" preserveAspectRatio="xMidYMid slice" opacity=".34"/>
+  <rect width="1600" height="1100" fill="#f3f7f3" opacity=".72"/>
+  <rect width="1600" height="126" fill="url(#header)" opacity=".94"/>
+  <text x="54" y="58" class="title">AgriSense-BCTB | How the system works</text>
+  <text x="56" y="91" class="subtitle">Visual architecture • research screening request • local development setup</text>
+  <rect x="1310" y="35" width="238" height="38" rx="19" fill="#f5c46b"/>
+  <text x="1429" y="59" text-anchor="middle" class="pill" fill="#493411">RESEARCH PROTOTYPE</text>
+
+  <text x="54" y="166" class="section">A. What happens when a farmer runs a model screening</text>
+  <text x="1546" y="165" text-anchor="end" class="small">Follow the green arrows from left to right</text>
+
+  <!-- Primary flow cards -->
+  <g filter="url(#shadow)">
+    <rect x="48" y="196" width="310" height="460" rx="18" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="382" y="196" width="420" height="460" rx="18" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="826" y="196" width="400" height="460" rx="18" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="1250" y="196" width="302" height="460" rx="18" fill="#fff" stroke="#d7e4d9"/>
+  </g>
+
+  <!-- Client -->
+  <circle cx="81" cy="235" r="17" fill="#e1f1e5"/>
+  <path d="M73 239 Q81 226 89 239 M76 230 a5 5 0 1 0 10 0" fill="none" stroke="#43845f" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="108" y="241" class="heading">1 · Farmer's device</text>
+  <text x="72" y="280" class="heading">React + TypeScript web app</text>
+  <text x="72" y="306" class="body">Runs in a browser on desktop or phone.</text>
+  <rect x="72" y="330" width="260" height="90" rx="12" fill="#f1f7f2"/>
+  <text x="88" y="357" class="heading">Screening wizard</text>
+  <text x="88" y="382" class="body">Collects and validates farm observations;</text>
+  <text x="88" y="402" class="body">maps seven fields for the model.</text>
+  <rect x="72" y="438" width="260" height="78" rx="12" fill="#f1f7f2"/>
+  <text x="88" y="466" class="heading">Frontend services</text>
+  <text x="88" y="491" class="body">Prepare request; attach Firebase ID token.</text>
+  <rect x="72" y="534" width="260" height="88" rx="12" fill="#f7f8f6" stroke="#e0e7e0"/>
+  <text x="88" y="562" class="heading">On-device storage</text>
+  <text x="88" y="586" class="body">Drafts, cache, history, offline queue</text>
+  <text x="88" y="606" class="small">localStorage + IndexedDB; device-local</text>
+
+  <!-- Firebase -->
+  <circle cx="415" cy="235" r="17" fill="#fff0d6"/>
+  <path d="M415 224 L421 235 L415 246 L409 235 Z" fill="#e79a24"/>
+  <text x="442" y="241" class="heading">2 · Firebase backend</text>
+  <rect x="408" y="270" width="368" height="76" rx="12" fill="#fff8eb"/>
+  <text x="426" y="298" class="heading">Authentication</text>
+  <text x="426" y="322" class="body">Creates accounts and signs users in.</text>
+  <rect x="408" y="360" width="368" height="95" rx="12" fill="#f1f7f2"/>
+  <text x="426" y="389" class="heading">Cloud Functions · trusted gateway</text>
+  <text x="426" y="414" class="body">Verifies ID token, active profile, and role;</text>
+  <text x="426" y="436" class="body">keeps the model API key off the browser.</text>
+  <rect x="408" y="469" width="176" height="76" rx="12" fill="#f6f7f5"/>
+  <text x="424" y="497" class="heading">Firestore</text>
+  <text x="424" y="521" class="body">Profiles, farms, cases</text>
+  <rect x="600" y="469" width="176" height="76" rx="12" fill="#f6f7f5"/>
+  <text x="616" y="497" class="heading">Cloud Storage</text>
+  <text x="616" y="521" class="body">Field media/files</text>
+  <rect x="408" y="559" width="368" height="63" rx="12" fill="#f6f7f5"/>
+  <text x="426" y="585" class="heading">Local emulator or Firebase cloud</text>
+  <text x="426" y="607" class="small">Same app logic; separate local and production data.</text>
+
+  <!-- Model service -->
+  <circle cx="859" cy="235" r="17" fill="#e4eff8"/>
+  <path d="M850 230 h18 M850 236 h18 M850 242 h18" stroke="#3275a8" stroke-width="2.4" stroke-linecap="round"/>
+  <text x="886" y="241" class="heading">3 · Python inference service</text>
+  <rect x="852" y="270" width="348" height="72" rx="12" fill="#edf5fb"/>
+  <text x="870" y="299" class="heading">FastAPI · POST /predict</text>
+  <text x="870" y="323" class="body">Validates the seven model inputs.</text>
+  <rect x="852" y="356" width="348" height="92" rx="12" fill="#edf5fb"/>
+  <text x="870" y="386" class="heading">logistic_regression.joblib</text>
+  <text x="870" y="412" class="body">Preprocessing + Logistic Regression</text>
+  <text x="870" y="434" class="small">Serialized trained model artifact</text>
+  <rect x="852" y="462" width="348" height="78" rx="12" fill="#edf5fb"/>
+  <text x="870" y="491" class="heading">Explanation + next steps</text>
+  <text x="870" y="516" class="body">SHAP contribution + cautious verification advice</text>
+  <rect x="852" y="554" width="348" height="68" rx="12" fill="#fff4e8" stroke="#f1d8b8"/>
+  <text x="870" y="581" class="heading">Research-only limitation</text>
+  <text x="870" y="604" class="small">Synthetic labels; not a diagnosis or validated predictor.</text>
+
+  <!-- Results -->
+  <circle cx="1283" cy="235" r="17" fill="#e1f1e5"/>
+  <path d="M1275 235 l6 6 11-13" fill="none" stroke="#43845f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1310" y="241" class="heading">4 · Result shown</text>
+  <text x="1276" y="280" class="heading">Back in the dashboard</text>
+  <rect x="1276" y="300" width="250" height="54" rx="12" fill="#eaf5ec"/>
+  <text x="1401" y="334" text-anchor="middle" class="heading" fill="#286141">LOW / MODERATE / HIGH</text>
+  <text x="1276" y="387" class="body">The interface displays:</text>
+  <text x="1292" y="420" class="body">• Research risk class</text>
+  <text x="1292" y="450" class="body">• Class probabilities</text>
+  <text x="1292" y="480" class="body">• SHAP input contributions</text>
+  <text x="1292" y="510" class="body">• Verification-focused next steps</text>
+  <rect x="1276" y="546" width="250" height="76" rx="12" fill="#fff4e8" stroke="#f1d8b8"/>
+  <text x="1292" y="573" class="heading">Not a confirmed diagnosis</text>
+  <text x="1292" y="596" class="small">Field inspection is still required.</text>
+
+  <!-- Request and return arrows -->
+  <path d="M358 402 H377" fill="none" stroke="#43845f" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M802 402 H821" fill="none" stroke="#43845f" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M1226 402 H1245" fill="none" stroke="#43845f" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="332" y="359" width="60" height="24" rx="12" fill="#e1f1e5"/>
+  <text x="362" y="376" text-anchor="middle" class="small">inputs</text>
+  <rect x="766" y="359" width="94" height="24" rx="12" fill="#e1f1e5"/>
+  <text x="813" y="376" text-anchor="middle" class="small">authorized</text>
+  <rect x="1192" y="359" width="70" height="24" rx="12" fill="#e1f1e5"/>
+  <text x="1227" y="376" text-anchor="middle" class="small">result</text>
+  <path d="M1402 666 V686 H560 V666" fill="none" stroke="#3275a8" stroke-width="2.5" stroke-dasharray="8 7" marker-end="url(#arrowBlue)"/>
+  <rect x="783" y="672" width="290" height="27" rx="13" fill="#eaf2f8"/>
+  <text x="928" y="690" text-anchor="middle" class="small">Prediction response returns to the browser</text>
+
+  <!-- Training pipeline -->
+  <text x="54" y="744" class="section">B. Where the trained model comes from</text>
+  <text x="1546" y="743" text-anchor="end" class="small">Training pipeline is separate from a live screening request</text>
+
+  <g filter="url(#shadow)">
+    <rect x="48" y="770" width="340" height="190" rx="16" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="420" y="770" width="340" height="190" rx="16" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="792" y="770" width="340" height="190" rx="16" fill="#fff" stroke="#d7e4d9"/>
+    <rect x="1164" y="770" width="388" height="190" rx="16" fill="#fff" stroke="#d7e4d9"/>
+  </g>
+  <text x="72" y="810" class="heading">1 · Prepare demonstration data</text>
+  <text x="72" y="841" class="body">Synthetic farm assessment rows</text>
+  <text x="72" y="866" class="body">+ NASA POWER weather estimates</text>
+  <text x="72" y="910" class="small">Weather is real gridded data;</text>
+  <text x="72" y="930" class="small">BCTB labels are illustrative/synthetic.</text>
+
+  <text x="444" y="810" class="heading">2 · Train and compare models</text>
+  <text x="444" y="841" class="body">Training script builds preprocessing</text>
+  <text x="444" y="866" class="body">and classifier pipelines.</text>
+  <text x="444" y="910" class="small">Experiment compares candidate classifiers;</text>
+  <text x="444" y="930" class="small">the app currently loads Logistic Regression.</text>
+
+  <text x="816" y="810" class="heading">3 · Export model artifact</text>
+  <rect x="816" y="830" width="290" height="48" rx="10" fill="#edf5fb"/>
+  <text x="961" y="860" text-anchor="middle" class="heading">logistic_regression.joblib</text>
+  <text x="816" y="912" class="body">Saved under the ML models folder.</text>
+  <text x="816" y="934" class="small">Loaded when the Python API starts.</text>
+
+  <text x="1188" y="810" class="heading">4 · Serve predictions</text>
+  <text x="1188" y="841" class="body">FastAPI loads the artifact and uses</text>
+  <text x="1188" y="866" class="body">SHAP background reference rows.</text>
+  <text x="1188" y="910" class="small">Inference produces output; it does not retrain</text>
+  <text x="1188" y="930" class="small">the model for every screening.</text>
+
+  <path d="M388 866 H414" fill="none" stroke="#43845f" stroke-width="3.5" marker-end="url(#arrow)"/>
+  <path d="M760 866 H786" fill="none" stroke="#43845f" stroke-width="3.5" marker-end="url(#arrow)"/>
+  <path d="M1132 866 H1158" fill="none" stroke="#43845f" stroke-width="3.5" marker-end="url(#arrow)"/>
+
+  <!-- Runtime and limitation footer -->
+  <rect x="48" y="984" width="1504" height="78" rx="15" fill="#203d2d"/>
+  <text x="72" y="1015" class="heading white">CURRENT LOCAL RUN</text>
+  <text x="72" y="1040" class="small white">React/Vite :5173  •  Firebase emulators :9099 / :5001 / :8080 / :9199  •  Python API :8000</text>
+  <line x1="850" y1="999" x2="850" y2="1048" stroke="#78927e" stroke-width="1"/>
+  <text x="878" y="1015" class="heading white">PRODUCTION MODEL HOSTING</text>
+  <text x="878" y="1040" class="small white">Cloud Run is a deployment target; only claim deployment after it is actually configured and live.</text>
+
+  <text x="800" y="1087" text-anchor="middle" class="small">AgriSense is an early-warning decision-support prototype. Synthetic training labels are not confirmed BCTB outcomes.</text>
+</svg>

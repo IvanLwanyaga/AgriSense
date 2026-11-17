@@ -1,0 +1,374 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isEmailVerified() {
+      return isAuthenticated()
+        && request.auth.token.email_verified == true
+        && getUserData().status == 'ACTIVE';
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isEmailVerified() && request.auth.uid == userId;
+    }
+    
+    function hasRole(role) {
+      return isEmailVerified()
+        && getUserData().role == role
+        && getUserData().status == 'ACTIVE';
+    }
+    
+    function isAdmin() {
+      return hasRole('PLATFORM_ADMIN');
+    }
+
+    function isOfficer() {
+      return hasRole('AGRICULTURAL_OFFICER') || hasRole('PLATFORM_ADMIN');
+    }
+
+    function canAccessDistrict(district) {
+      return isAdmin()
+        || (hasRole('AGRICULTURAL_OFFICER')
+          && (
+            getUserData().assignedDistrict == district
+            || (
+              'assignedDistricts' in getUserData()
+              && getUserData().assignedDistricts.hasAny([district])
+            )
+          ));
+    }
+
+    function belongsToOrganization(organizationId) {
+      return isEmailVerified()
+        && getUserData().organizationId != null
+        && getUserData().organizationId == organizationId
+        && (hasRole('ORG_ADMIN') || hasRole('FARM_MANAGER'));
+    }
+
+    function canAnswerHelpRoom() {
+      return isOfficer() || hasRole('FARM_MANAGER');
+    }
+
+    function isFarmer() {
+      return hasRole('FARMER');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SECURE OTP STORE: Stored on backend only. Never accessible to clients.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /emailOtps/{otpId} {
+      allow read, write: if false;
+    }
+    match /emailOtpRateLimits/{rateLimitId} {
+      allow read, write: if false;
+    }
+
+    // User roles are assigned only by platform administrators.
+    // Unverified users can read their own profile to load name and registration status.
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId
+        || isAdmin()
+        || (isEmailVerified()
+          && resource.data.organizationId != null
+          && belongsToOrganization(resource.data.organizationId))
+      );
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'fullName', 'email', 'phone', 'organizationId', 'role', 'status',
+          'emailVerified', 'requestedRole', 'applicationStatus', 'assignedDistrict',
+          'assignedSubCounty', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == userId
+        && request.resource.data.role == 'FARMER'
+        && request.resource.data.organizationId == null
+        && (!('emailVerified' in request.resource.data) || request.resource.data.emailVerified == false)
+        && request.resource.data.status in ['ACTIVE', 'PENDING']
+        && (
+          (request.resource.data.status == 'ACTIVE' && !('requestedRole' in request.resource.data))
+          || (request.resource.data.status == 'PENDING'
+            && request.resource.data.requestedRole == 'AGRICULTURAL_OFFICER'
+            && request.resource.data.applicationStatus == 'PENDING')
+        );
+      allow update: if (isAdmin()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'status', 'organizationId', 'requestedRole', 'applicationStatus',
+          'subscriptionTier', 'subscriptionStatus', 'subscriptionExpiresAt'
+        ]))
+        || (isOwner(userId)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.organizationId == resource.data.organizationId
+        && (!('subscriptionTier' in request.resource.data) || request.resource.data.subscriptionTier == resource.data.subscriptionTier)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'email', 'phone', 'smsConsent', 'updatedAt'])
+        && (!('email' in request.resource.data) || request.resource.data.email == request.auth.token.email)
+        && (!('smsConsent' in request.resource.data) || request.resource.data.smsConsent is bool));
+      allow delete: if isAdmin();
+    }
+
+    // Officer applications contain staff identifiers and are visible only to
+    // the applicant and an administrator. Approval activates officer privileges.
+    match /staffApplications/{applicationId} {
+      allow read: if isAdmin()
+        || (isAuthenticated() && request.auth.uid == resource.data.userId);
+      allow create: if isOwner(applicationId)
+        && request.resource.data.keys().hasOnly(['userId', 'fullName', 'email', 'phone', 'requestedRole', 'assignedDistrict', 'assignedSubCounty', 'organizationName', 'staffId', 'status', 'createdAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.requestedRole == 'AGRICULTURAL_OFFICER'
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.fullName is string
+        && request.resource.data.email is string
+        && request.resource.data.assignedDistrict is string
+        && request.resource.data.assignedSubCounty is string
+        && request.resource.data.organizationName is string
+        && request.resource.data.organizationName.size() > 0
+        && request.resource.data.staffId is string
+        && request.resource.data.staffId.size() > 0;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Farm access is verified-owner, organization-, or assigned-district-scoped.
+    // Unverified accounts cannot create or view farms.
+    match /farms/{farmId} {
+      allow read: if isEmailVerified() && (
+        resource.data.farmerId == request.auth.uid
+        || belongsToOrganization(resource.data.organizationId)
+        || canAccessDistrict(resource.data.district)
+      );
+      allow create: if isEmailVerified()
+        && (isFarmer() || hasRole('FARM_MANAGER'))
+        && request.resource.data.farmerId == request.auth.uid
+        && request.resource.data.organizationId == getUserData().organizationId;
+      allow update: if isVerifiedOwner(resource.data.farmerId)
+        && request.resource.data.farmerId == resource.data.farmerId
+        && request.resource.data.organizationId == resource.data.organizationId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'boundary', 'boundaryAreaHectares', 'passportAudit', 'passportUpdatedAt'
+        ])
+        && request.resource.data.boundary is list
+        && request.resource.data.boundary.size() >= 3
+        && request.resource.data.boundary.size() <= 500
+        && request.resource.data.boundaryAreaHectares is number
+        && request.resource.data.boundaryAreaHectares > 0
+        && request.resource.data.passportAudit is list
+        && request.resource.data.passportUpdatedAt == request.time;
+      allow delete: if isVerifiedOwner(resource.data.farmerId) || isAdmin();
+    }
+
+    // Fields under farms
+    match /fields/{fieldId} {
+      allow read: if isEmailVerified() && (
+        resource.data.farmerId == request.auth.uid
+        || belongsToOrganization(resource.data.organizationId)
+        || canAccessDistrict(resource.data.district)
+      );
+      allow create: if isEmailVerified()
+        && (isFarmer() || hasRole('FARM_MANAGER'))
+        && request.resource.data.farmerId == request.auth.uid
+        && request.resource.data.organizationId == getUserData().organizationId;
+      allow update: if isVerifiedOwner(resource.data.farmerId)
+        && request.resource.data.farmerId == resource.data.farmerId
+        && request.resource.data.organizationId == resource.data.organizationId;
+      allow delete: if isVerifiedOwner(resource.data.farmerId) || isAdmin();
+    }
+
+    // BCTB Assessments: Created by farmer; Readable by owner, officer, and admin
+    match /assessments/{assessmentId} {
+      allow read: if isEmailVerified() && (
+        resource.data.farmerId == request.auth.uid
+        || canAccessDistrict(resource.data.district)
+      );
+      allow create, update, delete: if false;
+    }
+
+    // Risk Results: Generated results; immutable client-side write unless created via backend or user's assessment
+    match /riskResults/{resultId} {
+      allow read: if isEmailVerified() && (
+        resource.data.farmerId == request.auth.uid
+        || belongsToOrganization(resource.data.organizationId)
+        || canAccessDistrict(resource.data.district)
+      );
+      allow create, update, delete: if false;
+    }
+
+    // Follow-Up Referrals: Extension officers and Admins manage; Farmer can read their own case
+    match /followUps/{caseId} {
+      allow read: if isEmailVerified() && (
+        resource.data.farmerId == request.auth.uid
+        || canAccessDistrict(resource.data.district)
+      );
+      allow create, update, delete: if false;
+    }
+
+    // Rule Configurations: Publicly readable by verified users; Only platform admins can write/activate
+    match /ruleConfigurations/{configId} {
+      allow read: if isEmailVerified();
+      allow write: if isAdmin();
+    }
+
+    // Daily coffee-price bulletin is readable by signed-in users and publishable only by platform admins.
+    match /marketPrices/{priceId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin()
+        && priceId == 'uganda-coffee'
+        && request.resource.data.keys().hasOnly(['effectiveDate', 'source', 'rates', 'updatedAt', 'updatedBy'])
+        && request.resource.data.keys().hasAll(['effectiveDate', 'source', 'rates', 'updatedAt', 'updatedBy'])
+        && request.resource.data.effectiveDate is string
+        && request.resource.data.effectiveDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.source is string
+        && request.resource.data.source.size() > 0
+        && request.resource.data.source.size() <= 300
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.rates is map
+        && request.resource.data.rates.keys().hasOnly(['robustaKiboko', 'robustaFaq', 'arabicaParchment'])
+        && request.resource.data.rates.keys().hasAll(['robustaKiboko', 'robustaFaq', 'arabicaParchment'])
+        && request.resource.data.rates.robustaKiboko.keys().hasOnly(['minimum', 'maximum'])
+        && request.resource.data.rates.robustaKiboko.keys().hasAll(['minimum', 'maximum'])
+        && request.resource.data.rates.robustaKiboko.minimum is number
+        && request.resource.data.rates.robustaKiboko.maximum is number
+        && request.resource.data.rates.robustaKiboko.minimum >= 0
+        && request.resource.data.rates.robustaKiboko.maximum >= request.resource.data.rates.robustaKiboko.minimum
+        && request.resource.data.rates.robustaFaq.keys().hasOnly(['minimum', 'maximum'])
+        && request.resource.data.rates.robustaFaq.keys().hasAll(['minimum', 'maximum'])
+        && request.resource.data.rates.robustaFaq.minimum is number
+        && request.resource.data.rates.robustaFaq.maximum is number
+        && request.resource.data.rates.robustaFaq.minimum >= 0
+        && request.resource.data.rates.robustaFaq.maximum >= request.resource.data.rates.robustaFaq.minimum
+        && request.resource.data.rates.arabicaParchment.keys().hasOnly(['minimum', 'maximum'])
+        && request.resource.data.rates.arabicaParchment.keys().hasAll(['minimum', 'maximum'])
+        && request.resource.data.rates.arabicaParchment.minimum is number
+        && request.resource.data.rates.arabicaParchment.maximum is number
+        && request.resource.data.rates.arabicaParchment.minimum >= 0
+        && request.resource.data.rates.arabicaParchment.maximum >= request.resource.data.rates.arabicaParchment.minimum;
+      allow delete: if isAdmin() && priceId == 'uganda-coffee';
+    }
+
+    // Weather Snapshots: Readable by verified users for regional caching; write by backend
+    match /weatherSnapshots/{snapId} {
+      allow read: if isEmailVerified();
+      allow write: if false;
+    }
+
+    // Audit logs: Strictly read/write restricted to platform admins and cloud functions
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // SMS Dispatches: Real SMS delivery audit log; managed by Cloud Functions
+    match /smsDispatches/{dispatchId} {
+      allow read: if isAdmin() || (isEmailVerified() && (
+        resource.data.farmerUid == request.auth.uid
+        || resource.data.officerUid == request.auth.uid
+      ));
+      allow create, update, delete: if false;
+    }
+
+    // In-App Notifications: User-scoped notifications
+    match /notifications/{notificationId} {
+      allow read: if isEmailVerified() && (
+        resource.data.userId == request.auth.uid
+        || isAdmin()
+      );
+      allow update: if isEmailVerified()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt']);
+      allow create, delete: if isAdmin();
+    }
+
+    // Shared coffee help room. Verified users can read and participate.
+    match /helpQuestions/{questionId} {
+      allow read: if isEmailVerified();
+      allow create: if isFarmer()
+        && request.resource.data.keys().hasOnly(['farmerId', 'farmerName', 'district', 'subCounty', 'category', 'title', 'message', 'lastMessage', 'createdAt', 'lastMessageAt'])
+        && request.resource.data.farmerId == request.auth.uid
+        && request.resource.data.farmerName == getUserData().fullName
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 3000
+        && request.resource.data.lastMessage == request.resource.data.message
+        && request.resource.data.lastMessageAt == request.resource.data.createdAt
+        && request.resource.data.category in ['bctb_signs', 'pruning', 'shade', 'weather']
+        && request.resource.data.createdAt is int;
+      allow update: if isEmailVerified()
+        && (canAnswerHelpRoom() || (isFarmer() && resource.data.farmerId == request.auth.uid))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt'])
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.size() > 0
+        && request.resource.data.lastMessage.size() <= 3000
+        && request.resource.data.lastMessageAt is int;
+      allow delete: if false;
+
+      match /replies/{replyId} {
+        allow read: if isEmailVerified();
+        allow create: if isEmailVerified()
+          && (canAnswerHelpRoom() || request.auth.uid == get(/databases/$(database)/documents/helpQuestions/$(questionId)).data.farmerId)
+          && request.resource.data.keys().hasOnly(['responderId', 'responderName', 'responderRole', 'message', 'createdAt'])
+          && request.resource.data.responderId == request.auth.uid
+          && request.resource.data.responderName == getUserData().fullName
+          && request.resource.data.responderRole == getUserData().role
+          && (canAnswerHelpRoom() || request.resource.data.responderRole == 'FARMER')
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && request.resource.data.message.size() <= 3000
+          && request.resource.data.createdAt is int;
+        allow update, delete: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SAAS SUBSCRIPTIONS & MULTI-TENANT ORGANIZATIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    match /subscriptionRequests/{requestId} {
+      allow read: if isAdmin() || (isEmailVerified() && resource.data.userId == request.auth.uid);
+      allow create: if isEmailVerified()
+        && request.resource.data.keys().hasOnly([
+          'id', 'userId', 'userEmail', 'userName', 'planId', 'requestedAt',
+          'status', 'notes', 'organizationName', 'createdAt'
+        ])
+        && request.resource.data.id == requestId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userEmail is string
+        && request.resource.data.userName is string
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000
+        && request.resource.data.planId in ['FARMER_PLUS', 'ORGANISATION']
+        && request.resource.data.status == 'PENDING';
+      allow update, delete: if false;
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isEmailVerified() && (
+        isAdmin()
+        || belongsToOrganization(orgId)
+        || (getUserData().organizationId == orgId)
+      );
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        isEmailVerified()
+        && belongsToOrganization(orgId)
+        && hasRole('ORG_ADMIN')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'contactPhone', 'contactEmail', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

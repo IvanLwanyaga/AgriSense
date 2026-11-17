@@ -1,0 +1,12 @@
+{
+  "name": "AgriSense BCTB Early Warning",
+  "short_name": "AgriSense",
+  "description": "Offline-friendly coffee farm screening and extension support.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f3",
+  "theme_color": "#24513c",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

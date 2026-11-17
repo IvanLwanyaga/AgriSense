@@ -1,0 +1,141 @@
+{
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    }
+  },
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/askAgriSenseAI",
+        "function": {
+          "functionId": "askAgriSenseAI",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/transcribeFieldNote",
+        "function": {
+          "functionId": "transcribeFieldNote",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/getWeatherSnapshot",
+        "function": {
+          "functionId": "getWeatherSnapshot",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/getUcdaCoffeePrices",
+        "function": {
+          "functionId": "getUcdaCoffeePrices",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/predictResearchBctb",
+        "function": {
+          "functionId": "predictResearchBctb",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/submitBctbAssessment",
+        "function": {
+          "functionId": "submitBctbAssessment",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/updateFollowUpCase",
+        "function": {
+          "functionId": "updateFollowUpCase",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/sendSmsNotification",
+        "function": {
+          "functionId": "sendSmsNotification",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/sendSmsBroadcast",
+        "function": {
+          "functionId": "sendSmsBroadcast",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/adminUpdateRules",
+        "function": {
+          "functionId": "adminUpdateRules",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/reviewOfficerApplication",
+        "function": {
+          "functionId": "reviewOfficerApplication",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/reviewSubscriptionRequest",
+        "function": {
+          "functionId": "reviewSubscriptionRequest",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/updateUserAccess",
+        "function": {
+          "functionId": "updateUserAccess",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/assignOrganizationMember",
+        "function": {
+          "functionId": "assignOrganizationMember",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

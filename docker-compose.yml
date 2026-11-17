@@ -1,0 +1,50 @@
+services:
+  ml-api:
+    build:
+      context: .
+      dockerfile: AgriSense_BCTB_Data_Retrieval/ml/Dockerfile
+      args:
+        INSTALL_OPTIONAL_ML_EXTRAS: "true"
+    environment:
+      PORT: "8000"
+      DATABASE_URL: postgresql://agrisense:${POSTGRES_PASSWORD:-local-dev-only}@postgres:5432/agrisense
+      RESEARCH_MODEL_API_KEY: ${RESEARCH_MODEL_API_KEY:?Set RESEARCH_MODEL_API_KEY in your environment}
+      CHROMA_PATH: /app/chroma
+      OLLAMA_BASE_URL: http://ollama:11434
+      TWIG_YOLO_MODEL: /app/optional-models/twig_holes.pt
+    volumes:
+      - ./AgriSense_BCTB_Data_Retrieval/ml/chroma:/app/chroma
+      - ./AgriSense_BCTB_Data_Retrieval/ml/documents:/app/documents:ro
+      - ./AgriSense_BCTB_Data_Retrieval/ml/models/optional:/app/optional-models
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+  postgres
+  
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agrisense
+      POSTGRES_USER: agrisense
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    volumes:
+      - agrisense-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agrisense -d agrisense"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - agrisense-ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  agrisense-postgres:
+  agrisense-ollama:
