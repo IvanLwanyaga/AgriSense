@@ -1,4 +1,6 @@
+
 import { useEffect, useState, type CSSProperties } from "react";
+import "./PublicLanding.css";
 
 const coffeeImages = [
   "robusta-green-cherries.jpg",
@@ -7,6 +9,66 @@ const coffeeImages = [
   "robusta-ripe-cherries.jpg",
   "robusta-coffee-farm.jpg",
 ] as const;
+
+const videoIds = ["3o-yMdcchQM", "lRNb86xg--c"] as const;
+
+const features = [
+  {
+    number: "01",
+    icon: "⌖",
+    label: "MONITOR",
+    title: "Know your coffee farm",
+    description:
+      "Keep farm profiles, plantation details, field observations and records organised in one workspace.",
+  },
+  {
+    number: "02",
+    icon: "◉",
+    label: "SCREEN",
+    title: "Understand BCTB risk",
+    description:
+      "Use guided observations and relevant farm conditions to screen for potential Black Coffee Twig Borer risk.",
+  },
+  {
+    number: "03",
+    icon: "✳",
+    label: "UNDERSTAND",
+    title: "Know what influences risk",
+    description:
+      "Review contributing factors behind screening results and receive understandable, practical guidance.",
+  },
+  {
+    number: "04",
+    icon: "↗",
+    label: "CONNECT",
+    title: "Work with extension teams",
+    description:
+      "Share relevant farm information and coordinate field verification and follow-up with agricultural officers.",
+  },
+];
+
+const faqs = [
+  {
+    question: "What is AgriSense?",
+    answer:
+      "AgriSense is an agricultural intelligence platform designed to support Robusta coffee farmers and extension officers in Uganda through farm records, weather information, BCTB risk screening and agricultural guidance.",
+  },
+  {
+    question: "Does AgriSense diagnose Black Coffee Twig Borer?",
+    answer:
+      "No. AgriSense provides risk screening and early-warning information. A screening result is not confirmation of an infestation. Physical verification by an agricultural extension officer may be necessary.",
+  },
+  {
+    question: "Who can use the platform?",
+    answer:
+      "The platform is designed for Robusta coffee farmers, farm managers and agricultural extension officers, with administrative access for authorised platform personnel.",
+  },
+  {
+    question: "Does AgriSense provide agricultural advice?",
+    answer:
+      "AgriSense AI provides agricultural education and practical, non-chemical coffee management guidance. It does not replace professional field inspection or extension services.",
+  },
+];
 
 export default function PublicLanding({
   onSignIn,
@@ -17,105 +79,406 @@ export default function PublicLanding({
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       setActiveImage((current) => (current + 1) % coffeeImages.length);
     }, 8000);
+
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
     if (!activeVideo) return;
+
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setActiveVideo(null);
     };
+
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [activeVideo]);
 
+  useEffect(() => {
+    document.body.style.overflow = activeVideo ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [activeVideo]);
+
+  const closeMenu = () => setMobileMenuOpen(false);
+
   return (
     <main className="public-site">
-      <section
-        className="landing-hero"
-      >
-        <div key={coffeeImages[activeImage]} className="landing-photo" aria-hidden="true" style={{ backgroundImage: `url("/images/${coffeeImages[activeImage]}")` }} />
+      {/* HERO */}
+      <section className="landing-hero">
+        <div
+          key={coffeeImages[activeImage]}
+          className="landing-photo"
+          aria-hidden="true"
+          style={{
+            backgroundImage: `url("/images/${coffeeImages[activeImage]}")`,
+          }}
+        />
+
         <div className="landing-hero-shade" />
+
         <nav className="landing-nav" aria-label="Main navigation">
-          <a className="landing-brand" href="#top" aria-label="AgriSense home">
+          <a className="landing-brand" href="#top" onClick={closeMenu}>
             <span className="brand-mark">A</span>
-            <span>AgriSense <small>UGANDA</small></span>
+            <span className="brand-name">
+              AgriSense
+              <small>UGANDA</small>
+            </span>
           </a>
-          <div className="landing-nav-links">
-            <a href="#platform">Platform</a>
-            <a href="#how-it-works">How it works</a>
-            <button className="nav-signin" onClick={onSignIn}>Sign in</button>
-            <button className="nav-register" onClick={onRegister}>Create account <span>↗</span></button>
+
+          <button
+            className="mobile-menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          <div className={`landing-nav-links ${mobileMenuOpen ? "mobile-open" : ""}`}>
+            <a href="#platform" onClick={closeMenu}>Platform</a>
+            <a href="#how-it-works" onClick={closeMenu}>How it works</a>
+            <a href="#about" onClick={closeMenu}>About</a>
+            <a href="#faq" onClick={closeMenu}>FAQs</a>
+
+            <button
+              className="nav-signin"
+              onClick={() => {
+                closeMenu();
+                onSignIn();
+              }}
+            >
+              Sign in
+            </button>
+
+            <button
+              className="nav-register"
+              onClick={() => {
+                closeMenu();
+                onRegister();
+              }}
+            >
+              Create account <span>↗</span>
+            </button>
           </div>
         </nav>
 
         <div id="top" className="landing-hero-content">
           <div className="landing-copy">
-            <span className="landing-eyebrow"><i /> ROBUSTA COFFEE · BUILT FOR UGANDA</span>
-            <h1>See what’s happening<br />in your coffee fields.</h1>
-            <p>AgriSense brings farm observations, local weather, and explainable AI together to help farmers and extension teams catch Black Coffee Twig Borer risk earlier.</p>
-            <div className="landing-ctas">
-              <button className="landing-primary" onClick={onRegister}>Get started <span>→</span></button>
-              <button className="landing-secondary" onClick={() => setActiveVideo("3o-yMdcchQM")}><span className="play-icon">▶</span> Watch the live demo</button>
+            <div className="landing-eyebrow">
+              <i />
+              ROBUSTA COFFEE INTELLIGENCE · UGANDA
             </div>
-            <div className="landing-trust"><span>✳</span> Early warning for healthier Robusta harvests</div>
+
+            <h1>
+              Better insight.
+              <br />
+              Healthier coffee
+              <br />
+              <span>farms.</span>
+            </h1>
+
+            <p>
+              Bringing farm observations, local weather and explainable AI
+              together to help Robusta coffee farmers understand Black Coffee
+              Twig Borer risk and make informed farm-management decisions.
+            </p>
+
+            <div className="landing-ctas">
+              <button className="landing-primary" onClick={onRegister}>
+                Explore AgriSense <span>→</span>
+              </button>
+
+              <button
+                className="landing-secondary"
+                onClick={() => setActiveVideo(videoIds[0])}
+              >
+                <span className="play-icon">▶</span>
+                Watch field demo
+              </button>
+            </div>
+
+            <div className="landing-trust">
+              <span>✳</span>
+              Supporting informed decisions in Robusta coffee farming
+            </div>
           </div>
+
           <LiveRiskDemo onOpenVideo={setActiveVideo} />
         </div>
 
         <div className="hero-bottomline">
-          <span>FIELD INTELLIGENCE FOR EVERY GROWING SEASON</span>
+          <span>FIELD INTELLIGENCE FOR ROBUSTA COFFEE</span>
+
           <div className="hero-image-dots" aria-label="Choose background photo">
             {coffeeImages.map((image, index) => (
-              <button key={image} className={index === activeImage ? "active" : ""} onClick={() => setActiveImage(index)} aria-label={`Show coffee photo ${index + 1}`} aria-pressed={index === activeImage} />
+              <button
+                key={image}
+                className={index === activeImage ? "active" : ""}
+                onClick={() => setActiveImage(index)}
+                aria-label={`Show coffee photo ${index + 1}`}
+                aria-pressed={index === activeImage}
+              />
             ))}
           </div>
-          <span>UGANDA · ROBUSTA</span>
+
+          <span>MADE FOR UGANDA</span>
         </div>
       </section>
 
+      {/* INTRODUCTION */}
+      <section id="about" className="landing-intro">
+        <div className="intro-label">
+          <span className="section-kicker">A CLEARER VIEW OF YOUR COFFEE FARM</span>
+          <span className="intro-line" />
+        </div>
+
+        <div className="intro-content">
+          <h2>
+            Understand your farm.
+            <br />
+            <span>Act with better insight.</span>
+          </h2>
+
+          <p>
+            Robusta coffee farming depends on good observation and timely
+            decisions. AgriSense brings useful farm information into one
+            practical digital workspace, connecting farmers with tools and
+            guidance that support everyday farm management.
+          </p>
+        </div>
+      </section>
+
+      {/* PLATFORM FEATURES */}
       <section id="platform" className="landing-platform">
         <div className="platform-heading">
-          <span className="section-kicker">ONE CLEARER VIEW OF YOUR FARM</span>
-          <h2>From field signals<br />to confident next steps.</h2>
-          <p>A practical workspace for the people who grow, support, and protect Uganda’s coffee.</p>
+          <div className="section-kicker">THE AGRISENSE PLATFORM</div>
+          <h2>
+            From field signals
+            <br />
+            to informed decisions.
+          </h2>
+          <p>
+            Practical digital tools for the people who grow, monitor and
+            support Uganda's Robusta coffee.
+          </p>
         </div>
+
         <div className="platform-features">
-          <article className="platform-feature"><span className="feature-icon">⌖</span><small>01 / MONITOR</small><h3>Know your blocks</h3><p>Keep plantation details, farm conditions, and observations together in one place.</p></article>
-          <article className="platform-feature"><span className="feature-icon">⌁</span><small>02 / SCREEN</small><h3>Spot risk sooner</h3><p>Combine visible twig symptoms and weather signals in a guided BCTB screening.</p></article>
-          <article className="platform-feature"><span className="feature-icon">✳</span><small>03 / UNDERSTAND</small><h3>See why it matters</h3><p>Review the factors behind each result and get clear, practical follow-up guidance.</p></article>
-          <article className="platform-feature"><span className="feature-icon">◎</span><small>04 / CONNECT</small><h3>Bring teams closer</h3><p>Help farmers and extension officers coordinate verification and field follow-up.</p></article>
+          {features.map((feature) => (
+            <article className="platform-feature" key={feature.number}>
+              <div className="feature-top">
+                <span className="feature-icon">{feature.icon}</span>
+                <span className="feature-number">{feature.number}</span>
+              </div>
+
+              <small>{feature.label}</small>
+              <h3>{feature.title}</h3>
+              <p>{feature.description}</p>
+              <span className="feature-bottom-line" />
+            </article>
+          ))}
         </div>
       </section>
 
+      {/* HOW IT WORKS */}
       <section id="how-it-works" className="landing-how">
-        <div className="how-photo" role="img" aria-label="Coffee cherries growing among Robusta leaves" />
+        <div
+          className="how-photo"
+          role="img"
+          aria-label="Robusta coffee cherries growing among coffee leaves"
+        >
+          <div className="how-photo-caption">
+            <span>ROBUSTA COFFEE</span>
+            <strong>Knowledge starts in the field.</strong>
+          </div>
+        </div>
+
         <div className="how-copy">
-          <span className="section-kicker">A SIMPLE FIELD WORKFLOW</span>
-          <h2>Good decisions start<br />with what you can see.</h2>
+          <span className="section-kicker">A PRACTICAL FIELD WORKFLOW</span>
+
+          <h2>
+            Good decisions start
+            <br />
+            with what you observe.
+          </h2>
+
+          <p className="how-description">
+            Turn everyday farm observations into organised information
+            that supports better monitoring and follow-up.
+          </p>
+
           <ol>
-            <li><b>01</b><span><strong>Record a field observation</strong><small>Capture symptoms and farm context in a guided check.</small></span></li>
-            <li><b>02</b><span><strong>Review the risk signals</strong><small>See how observations and recent conditions shape the screening.</small></span></li>
-            <li><b>03</b><span><strong>Choose a practical next step</strong><small>Use clear cultural guidance or coordinate an officer visit.</small></span></li>
+            <li>
+              <b>01</b>
+              <span>
+                <strong>Record a field observation</strong>
+                <small>
+                  Capture visible symptoms and relevant farm conditions.
+                </small>
+              </span>
+            </li>
+
+            <li>
+              <b>02</b>
+              <span>
+                <strong>Review the risk signals</strong>
+                <small>
+                  Understand how recorded observations and conditions
+                  influence the screening result.
+                </small>
+              </span>
+            </li>
+
+            <li>
+              <b>03</b>
+              <span>
+                <strong>Choose a practical next step</strong>
+                <small>
+                  Review non-chemical management guidance or coordinate
+                  field verification with an extension officer.
+                </small>
+              </span>
+            </li>
           </ol>
-          <button className="landing-primary" onClick={onRegister}>Open your AgriSense workspace <span>→</span></button>
+
+          <button className="landing-primary" onClick={onRegister}>
+            Get started with AgriSense <span>→</span>
+          </button>
         </div>
       </section>
 
+      {/* RESPONSIBLE SCREENING */}
+      <section className="landing-responsible">
+        <div className="responsible-icon">✳</div>
+        <div>
+          <span className="section-kicker">RESPONSIBLE FARM INTELLIGENCE</span>
+          <h2>Screening supports decisions. It does not replace field diagnosis.</h2>
+          <p>
+            AgriSense provides risk-screening information and agricultural
+            education. Where physical confirmation is needed, farmers should
+            seek verification from an agricultural extension officer.
+          </p>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="landing-faq">
+        <div className="faq-heading">
+          <span className="section-kicker">QUESTIONS AND ANSWERS</span>
+          <h2>
+            Get to know
+            <br />
+            AgriSense.
+          </h2>
+          <p>
+            Learn about the platform, its purpose and how it supports
+            Robusta coffee farm management.
+          </p>
+        </div>
+
+        <div className="faq-list">
+          {faqs.map((faq) => (
+            <details key={faq.question} className="faq-item">
+              <summary>
+                {faq.question}
+                <span>+</span>
+              </summary>
+              <p>{faq.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* FINAL CTA */}
+      <section className="landing-final-cta">
+        <div className="final-cta-content">
+          <span className="section-kicker">YOUR COFFEE FARM, BETTER INFORMED</span>
+          <h2>
+            Bring your coffee
+            <br />
+            farm information together.
+          </h2>
+          <p>
+            Explore a digital workspace designed around Robusta coffee
+            farming and BCTB risk monitoring in Uganda.
+          </p>
+          <button className="landing-primary" onClick={onRegister}>
+            Create your AgriSense account <span>→</span>
+          </button>
+        </div>
+      </section>
+
+      {/* FOOTER */}
       <footer className="landing-footer">
-        <a className="landing-brand" href="#top"><span className="brand-mark">A</span><span>AgriSense <small>UGANDA</small></span></a>
-        <p>Explainable agricultural intelligence for Robusta coffee.</p>
-        <button onClick={onSignIn}>Sign in to your workspace <span>→</span></button>
+        <div className="footer-main">
+          <a className="landing-brand" href="#top">
+            <span className="brand-mark">A</span>
+            <span className="brand-name">
+              AgriSense
+              <small>UGANDA</small>
+            </span>
+          </a>
+
+          <p>
+            Explainable agricultural intelligence
+            <br />
+            for Robusta coffee farming.
+          </p>
+
+          <div className="footer-links">
+            <a href="#platform">Platform</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#faq">FAQs</a>
+            <button onClick={onSignIn}>Sign in</button>
+          </div>
+
+          <button className="footer-register" onClick={onRegister}>
+            Create account <span>↗</span>
+          </button>
+        </div>
+
+        <div className="footer-bottom">
+          <span>© {new Date().getFullYear()} AgriSense Uganda</span>
+          <span>Built around Uganda's Robusta coffee sector.</span>
+        </div>
       </footer>
+
+      {/* VIDEO MODAL */}
       {activeVideo && (
-        <div className="video-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveVideo(null); }}>
-          <section className="video-modal" role="dialog" aria-modal="true" aria-label="AgriSense field video">
-            <button className="video-modal-close" onClick={() => setActiveVideo(null)} aria-label="Close video">×</button>
+        <div
+          className="video-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setActiveVideo(null);
+            }
+          }}
+        >
+          <section
+            className="video-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AgriSense field video"
+          >
+            <button
+              className="video-modal-close"
+              onClick={() => setActiveVideo(null)}
+              aria-label="Close video"
+            >
+              ×
+            </button>
+
             <div className="video-modal-player">
               <iframe
                 src={`https://www.youtube-nocookie.com/embed/${activeVideo}?autoplay=1&rel=0`}
@@ -125,9 +488,20 @@ export default function PublicLanding({
                 allowFullScreen
               />
             </div>
-            <div className="video-modal-switcher" aria-label="Choose a field demo">
-              <button className={activeVideo === "3o-yMdcchQM" ? "selected" : ""} onClick={() => setActiveVideo("3o-yMdcchQM")}>Field demo 01</button>
-              <button className={activeVideo === "lRNb86xg--c" ? "selected" : ""} onClick={() => setActiveVideo("lRNb86xg--c")}>Field demo 02</button>
+
+            <div className="video-modal-switcher">
+              <button
+                className={activeVideo === videoIds[0] ? "selected" : ""}
+                onClick={() => setActiveVideo(videoIds[0])}
+              >
+                Field demo 01
+              </button>
+              <button
+                className={activeVideo === videoIds[1] ? "selected" : ""}
+                onClick={() => setActiveVideo(videoIds[1])}
+              >
+                Field demo 02
+              </button>
             </div>
           </section>
         </div>
@@ -136,47 +510,124 @@ export default function PublicLanding({
   );
 }
 
-function LiveRiskDemo({ onOpenVideo }: { onOpenVideo: (videoId: string) => void }) {
+function LiveRiskDemo({
+  onOpenVideo,
+}: {
+  onOpenVideo: (videoId: string) => void;
+}) {
   const [previousOutbreak, setPreviousOutbreak] = useState(false);
   const [rainyWeek, setRainyWeek] = useState(false);
   const [twigSymptoms, setTwigSymptoms] = useState(false);
-  const score = (previousOutbreak ? 30 : 0) + (rainyWeek ? 20 : 0) + (twigSymptoms ? 10 : 0);
-  const risk = score >= 60 ? "HIGH" : score >= 30 ? "MODERATE" : "LOW";
-  const riskLabel = risk === "HIGH" ? "High signals" : risk === "MODERATE" ? "Moderate signals" : "Low signals";
+
+  const score =
+    (previousOutbreak ? 30 : 0) +
+    (rainyWeek ? 20 : 0) +
+    (twigSymptoms ? 10 : 0);
+
+  const risk =
+    score >= 50 ? "HIGH" : score >= 30 ? "MODERATE" : "LOW";
+
+  const riskLabel =
+    risk === "HIGH"
+      ? "More signals selected"
+      : risk === "MODERATE"
+        ? "Some signals selected"
+        : "Fewer signals selected";
+
   const signals = [
-    { label: "Previous BCTB outbreak", active: previousOutbreak, toggle: () => setPreviousOutbreak(!previousOutbreak) },
-    { label: "Heavy rain this week", active: rainyWeek, toggle: () => setRainyWeek(!rainyWeek) },
-    { label: "Pinholes or twig damage", active: twigSymptoms, toggle: () => setTwigSymptoms(!twigSymptoms) },
+    {
+      label: "Previous BCTB outbreak",
+      active: previousOutbreak,
+      toggle: () => setPreviousOutbreak(!previousOutbreak),
+    },
+    {
+      label: "Heavy rain this week",
+      active: rainyWeek,
+      toggle: () => setRainyWeek(!rainyWeek),
+    },
+    {
+      label: "Pinholes or twig damage",
+      active: twigSymptoms,
+      toggle: () => setTwigSymptoms(!twigSymptoms),
+    },
   ];
 
   return (
-    <aside id="live-preview" className="demo-preview" aria-label="Interactive sample BCTB screening">
-      <div className="demo-preview-head"><span className="demo-live-dot" /><span>INTERACTIVE PREVIEW</span><small>SAMPLE DATA</small></div>
-      <h2>What could your field signals mean?</h2>
-      <p className="demo-preview-intro">Explore how a few observations can shape an early-warning screening.</p>
+    <aside
+      id="live-preview"
+      className="demo-preview"
+      aria-label="Illustrative BCTB risk explorer"
+    >
+      <div className="demo-preview-head">
+        <span className="demo-live-dot" />
+        <span>INTERACTIVE RISK EXPLORER</span>
+        <small>ILLUSTRATIVE</small>
+      </div>
+
+      <h2>Explore your field signals.</h2>
+
+      <p className="demo-preview-intro">
+        Select observations below to explore an example of how farm signals
+        can be presented in an early-warning screening.
+      </p>
+
       <div className="demo-signals">
         {signals.map(({ label, active, toggle }) => (
-          <button key={label} className={`demo-signal ${active ? "selected" : ""}`} onClick={toggle} aria-pressed={active}>
-            <span className="signal-check">{active ? "✓" : "+"}</span>{label}
+          <button
+            key={label}
+            className={`demo-signal ${active ? "selected" : ""}`}
+            onClick={toggle}
+            aria-pressed={active}
+          >
+            <span className="signal-check">{active ? "✓" : "+"}</span>
+            {label}
           </button>
         ))}
       </div>
+
       <div className={`demo-result risk-${risk.toLowerCase()}`}>
-        <div><span className="demo-result-label">SAMPLE SCREENING</span><strong>{riskLabel}</strong><small>{score} / 100 signal score</small></div>
-        <div className="demo-gauge" style={{ "--score": `${score}%` } as CSSProperties}><span>{score}</span></div>
+        <div>
+          <span className="demo-result-label">EXAMPLE SIGNAL SUMMARY</span>
+          <strong>{riskLabel}</strong>
+          <small>{score} / 60 illustrative points</small>
+        </div>
+
+        <div
+          className="demo-gauge"
+          style={{ "--score": `${(score / 60) * 100}%` } as CSSProperties}
+          aria-label={`${score} illustrative points`}
+        >
+          <span>{score}</span>
+        </div>
       </div>
-      <div className="demo-preview-foot"><span>Illustrative only · not a field diagnosis</span><span>Tap signals to explore</span></div>
-      <div id="live-demo-videos" className="demo-video-section">
-        <div className="demo-video-heading"><span>FIELD VIDEO RESOURCES</span><small>Watch on YouTube</small></div>
+
+      <div className="demo-preview-foot">
+        <span>Not a validated model prediction or field diagnosis.</span>
+      </div>
+
+      <div className="demo-video-section">
+        <div className="demo-video-heading">
+          <span>EXPLORE COFFEE FIELD VIDEOS</span>
+          <small>VIDEO RESOURCES</small>
+        </div>
+
         <div className="demo-video-grid">
-          <button type="button" onClick={() => onOpenVideo("3o-yMdcchQM")} aria-label="Play coffee field video one">
-            <img src="https://img.youtube.com/vi/3o-yMdcchQM/hqdefault.jpg" alt="Video preview" loading="lazy" />
-            <span className="video-play">▶</span><small>Watch video 01 <b>▶</b></small>
-          </button>
-          <button type="button" onClick={() => onOpenVideo("lRNb86xg--c")} aria-label="Play coffee field video two">
-            <img src="https://img.youtube.com/vi/lRNb86xg--c/hqdefault.jpg" alt="Video preview" loading="lazy" />
-            <span className="video-play">▶</span><small>Watch video 02 <b>▶</b></small>
-          </button>
+          {videoIds.map((id, index) => (
+            <button
+              type="button"
+              key={id}
+              onClick={() => onOpenVideo(id)}
+              aria-label={`Play coffee field video ${index + 1}`}
+            >
+              <img
+                src={`https://img.youtube.com/vi/${id}/hqdefault.jpg`}
+                alt={`Coffee field video ${index + 1} thumbnail`}
+                loading="lazy"
+              />
+              <span className="video-play">▶</span>
+              <small>Field video 0{index + 1}</small>
+            </button>
+          ))}
         </div>
       </div>
     </aside>
