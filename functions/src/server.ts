@@ -49,7 +49,7 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 // Firebase configuration
 if (!PROJECT_ID || !SERVICE_ACCOUNT_JSON) {
@@ -86,6 +86,203 @@ app.get("/health", (_req: Request, res: Response) => {
 
 // Email verification and registration email-change endpoints
 app.use("/", createOtpRouter(auth, db));
+
+// ============================================================
+// AgriSense Research Tools — Python ML API proxy
+// These routes run on Render, not Firebase Functions.
+// ============================================================
+
+const RESEARCH_MODEL_API_URL =
+  process.env.RESEARCH_MODEL_API_URL;
+
+const RESEARCH_MODEL_API_KEY =
+  process.env.RESEARCH_MODEL_API_KEY;
+
+type ResearchToolEndpoint =
+  | "/chat"
+  | "/transcribe"
+  | "/detect-twig";
+
+async function proxyResearchTool(
+  req: Request,
+  res: Response,
+  endpoint: ResearchToolEndpoint,
+  allowedRoles: string[],
+  timeoutMs: number,
+): Promise<void> {
+  try {
+    // 1. Verify Firebase authentication.
+    const authorization = req.headers.authorization;
+
+    if (!authorization?.startsWith("Bearer ")) {
+      res.status(401).json({
+        error: "Sign in to use this service.",
+      });
+      return;
+    }
+
+    let decodedToken;
+
+    try {
+      decodedToken = await auth.verifyIdToken(
+        authorization.substring(7),
+      );
+    } catch {
+      res.status(401).json({
+        error: "Your session has expired. Sign in again.",
+      });
+      return;
+    }
+
+    // 2. Require a verified email.
+    if (!decodedToken.email_verified) {
+      res.status(403).json({
+        error: "Please verify your email address.",
+      });
+      return;
+    }
+
+    // 3. Verify the user's account and role.
+    const userSnapshot = await db
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get();
+
+    const profile = userSnapshot.data();
+
+    if (
+      !profile ||
+      profile.status !== "ACTIVE" ||
+      !allowedRoles.includes(String(profile.role))
+    ) {
+      res.status(403).json({
+        error: "Your account is not authorized for this action.",
+      });
+      return;
+    }
+
+    // 4. Check research API configuration.
+    if (
+      !RESEARCH_MODEL_API_URL ||
+      !RESEARCH_MODEL_API_KEY
+    ) {
+      res.status(503).json({
+        error: "The research model service is not configured.",
+      });
+      return;
+    }
+
+    // 5. Forward the request to the Python API.
+    const upstreamUrl = new URL(
+      endpoint,
+      RESEARCH_MODEL_API_URL,
+    );
+
+    const upstream = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": RESEARCH_MODEL_API_KEY,
+      },
+      body: JSON.stringify(req.body ?? {}),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    const responseText = await upstream.text();
+
+    let payload: Record<string, unknown>;
+
+    try {
+      const parsed: unknown = responseText
+        ? JSON.parse(responseText)
+        : {};
+
+      payload =
+        parsed !== null &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed)
+          ? parsed as Record<string, unknown>
+          : {};
+    } catch {
+      payload = {
+        error: "The research model service returned an invalid response.",
+      };
+    }
+
+    // FastAPI commonly returns errors under "detail".
+    if (!upstream.ok && !payload.error) {
+      payload.error =
+        typeof payload.detail === "string"
+          ? payload.detail
+          : "The research model service could not complete the request.";
+    }
+
+    res.status(upstream.status).json(payload);
+
+  } catch (error) {
+    console.error(
+      `Research tool ${endpoint} failed:`,
+      error,
+    );
+
+    if (error instanceof Error && error.name === "TimeoutError") {
+      res.status(504).json({
+        error: "The research model service timed out. Please try again.",
+      });
+      return;
+    }
+
+    res.status(503).json({
+      error: "The research model service is temporarily unavailable.",
+    });
+  }
+}
+
+// Coffee pest manual search (RAG).
+app.post(
+  "/api/askManualRag",
+  (req: Request, res: Response) =>
+    proxyResearchTool(
+      req,
+      res,
+      "/chat",
+      [
+        "FARMER",
+        "FARM_MANAGER",
+        "AGRICULTURAL_OFFICER",
+        "ORG_ADMIN",
+        "PLATFORM_ADMIN",
+      ],
+      45000,
+    ),
+);
+
+// Luganda voice transcription.
+app.post(
+  "/api/transcribeLuganda",
+  (req: Request, res: Response) =>
+    proxyResearchTool(
+      req,
+      res,
+      "/transcribe",
+      ["FARMER", "FARM_MANAGER"],
+      120000,
+    ),
+);
+
+// BCTB twig image screening.
+app.post(
+  "/api/detectTwig",
+  (req: Request, res: Response) =>
+    proxyResearchTool(
+      req,
+      res,
+      "/detect-twig",
+      ["FARMER", "FARM_MANAGER"],
+      90000,
+    ),
+);
+
 
 // BCTB prediction endpoint
 app.post(
