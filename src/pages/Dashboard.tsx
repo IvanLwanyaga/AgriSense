@@ -3,6 +3,7 @@ import { useAuth } from "../context/useAuth";
 import { useLanguage, type SupportedLanguage } from "../context/LanguageContext";
 import { logoutUser } from "../services/authservice";
 import type { AppPage } from "../types/navigation";
+import "./Dashboard.css";
 
 // Pages
 import Farms from "./Farms";
