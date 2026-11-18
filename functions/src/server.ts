@@ -252,7 +252,7 @@ app.post(
 // AgriSense AI chatbot — Gemini via the Render backend
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-3.6-flash";
-const GEMINI_TIMEOUT_MS = 45000;
+const GEMINI_TIMEOUT_MS = 90000;
 
 const AGRISENSE_AI_INSTRUCTION = `
 You are AgriSense AI, an agricultural education assistant for smallholder Robusta coffee farmers in Uganda.
