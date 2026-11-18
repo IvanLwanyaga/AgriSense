@@ -30,6 +30,9 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173",
 ];
 
+// Prediction timeout: 120 seconds
+const PREDICTION_TIMEOUT_MS = 120000;
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -48,6 +51,7 @@ app.use(
 
 app.use(express.json({ limit: "1mb" }));
 
+// Firebase configuration
 if (!PROJECT_ID || !SERVICE_ACCOUNT_JSON) {
   throw new Error("Firebase environment configuration is missing.");
 }
@@ -88,6 +92,7 @@ app.post(
   "/api/predictResearchBctb",
   async (req: Request, res: Response): Promise<void> => {
     try {
+      // 1. Verify authentication
       const authorization = req.headers.authorization;
 
       if (!authorization?.startsWith("Bearer ")) {
@@ -110,6 +115,7 @@ app.post(
         return;
       }
 
+      // 2. Verify email
       if (!decodedToken.email_verified) {
         res.status(403).json({
           error: "Please verify your email address.",
@@ -117,6 +123,7 @@ app.post(
         return;
       }
 
+      // 3. Verify account and role
       const userSnapshot = await db
         .collection("users")
         .doc(decodedToken.uid)
@@ -135,6 +142,7 @@ app.post(
         return;
       }
 
+      // 4. Validate prediction input
       const { modelInputs, includeCounterfactual } = req.body ?? {};
 
       if (
@@ -148,19 +156,26 @@ app.post(
         return;
       }
 
+      // 5. Verify model service configuration
       if (!MODEL_API_URL || !MODEL_API_KEY) {
+        console.error("Prediction service configuration is missing.");
+
         res.status(503).json({
           error: "The prediction service is not configured.",
         });
         return;
       }
 
+      // 6. Prepare upstream prediction request
       const controller = new AbortController();
 
-      const timeout = setTimeout(
-        () => controller.abort(),
-        45000
-      );
+      const timeout = setTimeout(() => {
+        console.error(
+          `Prediction request exceeded ${PREDICTION_TIMEOUT_MS}ms.`
+        );
+
+        controller.abort();
+      }, PREDICTION_TIMEOUT_MS);
 
       try {
         const upstreamUrl = new URL("/predict", MODEL_API_URL);
@@ -171,6 +186,8 @@ app.post(
             "false"
           );
         }
+
+        console.log("Forwarding BCTB prediction request to ML service.");
 
         const upstream = await fetch(upstreamUrl, {
           method: "POST",
@@ -184,6 +201,7 @@ app.post(
           signal: controller.signal,
         });
 
+        // 7. Read Python ML API response
         const responseText = await upstream.text();
 
         let result: unknown;
@@ -191,19 +209,38 @@ app.post(
         try {
           result = JSON.parse(responseText);
         } catch {
+          console.error("Invalid prediction response:", {
+            status: upstream.status,
+            contentType: upstream.headers.get("content-type"),
+            responsePreview: responseText.slice(0, 1000),
+          });
+
           result = {
-            error: "Invalid response from prediction service.",
+            error: "Prediction service returned an invalid response.",
           };
         }
 
+        // 8. Forward the model response
         res.status(upstream.status).json(result);
+
       } finally {
         clearTimeout(timeout);
       }
+
     } catch (error) {
       console.error("Prediction API error:", error);
 
       if (!res.headersSent) {
+        if (
+          error instanceof Error &&
+          error.name === "AbortError"
+        ) {
+          res.status(504).json({
+            error: "Prediction timed out. Please try again.",
+          });
+          return;
+        }
+
         res.status(503).json({
           error: "The prediction service is temporarily unavailable.",
         });
