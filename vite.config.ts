@@ -5,11 +5,11 @@ import { defineConfig, loadEnv } from 'vite'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
-  // Authentication and Functions emulators are configured independently.
   const useFunctionsEmulator =
     env.VITE_USE_FUNCTIONS_EMULATOR === 'true'
 
   const projectId = env.VITE_FIREBASE_PROJECT_ID
+  const renderApiUrl = env.VITE_RENDER_API_URL
 
   if (!useFunctionsEmulator && !projectId) {
     throw new Error(
@@ -17,17 +17,30 @@ export default defineConfig(({ mode }) => {
     )
   }
 
+  if (!renderApiUrl) {
+    throw new Error(
+      'Set VITE_RENDER_API_URL in .env to use the Render API.'
+    )
+  }
+
+  const firebaseFunctionsTarget = useFunctionsEmulator
+    ? 'http://127.0.0.1:5001'
+    : `https://europe-west1-${projectId}.cloudfunctions.net`
+
   return {
     plugins: [react()],
     server: {
       proxy: {
+        // BCTB prediction now runs on Render.
+        '/api/predictResearchBctb': {
+          target: renderApiUrl,
+          changeOrigin: true,
+        },
+
+        // Other API endpoints remain on Firebase Functions.
         '/api': {
-          target: useFunctionsEmulator
-            ? 'http://127.0.0.1:5001'
-            : `https://europe-west1-${projectId}.cloudfunctions.net`,
-
+          target: firebaseFunctionsTarget,
           changeOrigin: !useFunctionsEmulator,
-
           rewrite: (path) =>
             useFunctionsEmulator
               ? path.replace(

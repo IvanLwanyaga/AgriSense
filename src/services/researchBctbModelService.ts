@@ -91,7 +91,9 @@ export async function predictResearchBctbRisk(
     || typeof prediction.disclaimer !== "string"
     || !prediction.disclaimer
   ) {
-    throw new Error("The research model returned an invalid response.");
+    throw new Error(
+  "The Render BCTB prediction API was not found. Check the Render deployment and API route."
+);
   }
 
   return {
