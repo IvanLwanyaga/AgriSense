@@ -467,6 +467,7 @@ export default function BctbAssessmentPage({
   const [modelError, setModelError] = useState("");
   const [offlineQueued, setOfflineQueued] = useState("");
   const [modelHealth, setModelHealth] = useState<"checking" | "online" | "offline">("checking");
+  const [modelHealthDetail, setModelHealthDetail] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [showErrors, setShowErrors] = useState(false);
   const [activeTab, setActiveTab] = useState<"NEW_ASSESSMENT" | "HISTORY">("NEW_ASSESSMENT");
@@ -512,9 +513,11 @@ export default function BctbAssessmentPage({
   useEffect(() => {
     let active = true;
     fetch("/api/modelHealth")
-      .then((response) => response.json() as Promise<{ ok?: boolean }>)
+      .then((response) => response.json() as Promise<{ ok?: boolean; status?: number }>)
       .then((data) => {
-        if (active) setModelHealth(data.ok ? "online" : "offline");
+        if (!active) return;
+        setModelHealth(data.ok ? "online" : "offline");
+        setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
       })
       .catch(() => {
         if (active) setModelHealth("offline");
@@ -799,7 +802,9 @@ export default function BctbAssessmentPage({
               ? "Checking trained model…"
               : modelHealth === "online"
                 ? "Trained model online"
-                : "Trained model offline — device fallback"}
+                : modelHealthDetail === "429"
+                  ? "Trained model rate-limited (429)"
+                  : "Trained model offline — device fallback"}
           </span>
         </div>
         <div className="mode-toggle" role="group" aria-label="Form style">
