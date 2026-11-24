@@ -91,7 +91,9 @@ export function evaluateWeatherAlerts(farmId: string, weather: FarmWeatherSummar
   return merged;
 }
 
-export function recordBctbScreeningAlert(result: BctbRiskResult): void {
+type BctbScreeningAlertInput = Pick<BctbRiskResult, "id" | "farmId" | "riskLevel" | "safeAdvisory" | "nextSteps" | "createdAt">;
+
+export function recordBctbScreeningAlert(result: BctbScreeningAlertInput): void {
   if (!result.farmId || result.riskLevel === "LOW") return;
   const alerts = getAlerts(result.farmId);
   const sourceId = result.id || result.createdAt;

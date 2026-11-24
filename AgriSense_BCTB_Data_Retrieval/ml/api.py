@@ -213,10 +213,16 @@ def build_shap_contributions(inputs: dict, model_input: pd.DataFrame, class_inde
 
     for transformed_name, contribution in zip(feature_names, shap_values):
         source_feature = next(
-            feature for feature in MODEL_FEATURES
-            if transformed_name == f"numeric__{feature}"
-            or transformed_name.startswith(f"categorical__{feature}_")
+            (
+                feature
+                for feature in MODEL_FEATURES
+                if transformed_name == f"numeric__{feature}"
+                or transformed_name.startswith(f"categorical__{feature}_")
+            ),
+            None,
         )
+        if source_feature is None:
+            continue
         contributions[source_feature] += float(contribution)
 
     def display_value(feature: str, value) -> str:
@@ -343,42 +349,86 @@ def predict(
     request: PredictionRequest,
     include_counterfactual: bool | None = Query(default=None),
 ) -> dict:
-    inputs = request.model_inputs.model_dump()
-    model_input = pd.DataFrame([inputs], columns=list(inputs))
-    probabilities = MODEL.predict_proba(model_input)[0]
-    predicted_index = int(probabilities.argmax())
-    shap_contributions = build_shap_contributions(inputs, model_input, predicted_index)
-    counterfactual = None
-    should_include_counterfactual = request.include_counterfactual if include_counterfactual is None else include_counterfactual
-    if CLASS_NAMES[predicted_index] == "HIGH" and should_include_counterfactual:
-        counterfactual = generate_counterfactual(inputs)
-    recommendations = generate_recommendations(inputs, shap_contributions, CLASS_NAMES[predicted_index])
-    response = {
-        "predicted_risk": CLASS_NAMES[predicted_index],
-        "class_probabilities": {
-            CLASS_NAMES[int(class_index)]: round(float(probability), 4)
-            for class_index, probability in zip(MODEL.classes_, probabilities)
-        },
-        "shap_contributions": shap_contributions,
-        "top_shap_contributions": sorted(
-            shap_contributions, key=lambda item: abs(item["contribution"]), reverse=True
-        )[:3],
-        "counterfactual": counterfactual,
-        "recommendations": recommendations,
-        "actionable_steps": build_actionable_steps(inputs, CLASS_NAMES[predicted_index], shap_contributions),
-        "model_name": "Expanded Logistic Regression (synthetic demo)",
-        "model_artifact": "logistic_regression.joblib",
-        "model_status": "RESEARCH_ONLY_SYNTHETIC_LABELS",
-        "input_count": sum(value is not None for value in inputs.values()),
-        "input_total": len(MODEL_FEATURES),
-        "disclaimer": (
-            "Research demonstration only. This expanded model was trained on simulated features and synthetic labels, "
-            "not verified field outcomes. Its probabilities are not calibrated and are not a diagnosis "
-            "or a basis for treatment decisions. Missing optional readings are imputed from synthetic training data."
-        ),
-    }
-    write_prediction_audit(inputs, response)
-    return response
+    try:
+        inputs = request.model_inputs.model_dump()
+        model_input = pd.DataFrame([inputs], columns=list(inputs))
+        probabilities = MODEL.predict_proba(model_input)[0]
+        predicted_index = int(probabilities.argmax())
+        predicted_risk = CLASS_NAMES[predicted_index]
+
+        try:
+            shap_contributions = build_shap_contributions(inputs, model_input, predicted_index)
+        except Exception as exc:
+            print(f"SHAP explanation unavailable: {exc}")
+            shap_contributions = [
+                {
+                    "feature": FEATURE_LABELS[feature],
+                    "value": "Explanation unavailable",
+                    "contribution": 0.0,
+                    "direction": "NEUTRAL",
+                }
+                for feature in MODEL_FEATURES
+            ]
+
+        counterfactual = None
+        should_include_counterfactual = (
+            request.include_counterfactual
+            if include_counterfactual is None
+            else include_counterfactual
+        )
+        if predicted_risk == "HIGH" and should_include_counterfactual:
+            try:
+                counterfactual = generate_counterfactual(inputs)
+            except Exception as exc:
+                print(f"Counterfactual generation unavailable: {exc}")
+                counterfactual = None
+
+        try:
+            recommendations = generate_recommendations(inputs, shap_contributions, predicted_risk)
+        except Exception as exc:
+            print(f"Recommendations unavailable: {exc}")
+            recommendations = None
+
+        try:
+            actionable_steps = build_actionable_steps(inputs, predicted_risk, shap_contributions)
+        except Exception as exc:
+            print(f"Action steps unavailable: {exc}")
+            actionable_steps = [
+                f"The trained model screened this farm as {predicted_risk.lower()} risk. "
+                "Confirm the symptoms in the field and ask your extension officer to verify before acting."
+            ]
+
+        response = {
+            "predicted_risk": predicted_risk,
+            "class_probabilities": {
+                CLASS_NAMES[int(class_index)]: round(float(probability), 4)
+                for class_index, probability in zip(MODEL.classes_, probabilities)
+            },
+            "shap_contributions": shap_contributions,
+            "top_shap_contributions": sorted(
+                shap_contributions, key=lambda item: abs(item["contribution"]), reverse=True
+            )[:3],
+            "counterfactual": counterfactual,
+            "recommendations": recommendations,
+            "actionable_steps": actionable_steps,
+            "model_name": "Expanded Logistic Regression (synthetic demo)",
+            "model_artifact": "logistic_regression.joblib",
+            "model_status": "RESEARCH_ONLY_SYNTHETIC_LABELS",
+            "input_count": sum(value is not None for value in inputs.values()),
+            "input_total": len(MODEL_FEATURES),
+            "disclaimer": (
+                "Research demonstration only. This expanded model was trained on simulated features and synthetic labels, "
+                "not verified field outcomes. Its probabilities are not calibrated and are not a diagnosis "
+                "or a basis for treatment decisions. Missing optional readings are imputed from synthetic training data."
+            ),
+        }
+        write_prediction_audit(inputs, response)
+        return response
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Prediction failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {exc}")
 
 
 def write_prediction_audit(inputs: dict, result: dict) -> None:

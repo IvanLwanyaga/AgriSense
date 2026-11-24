@@ -7,6 +7,10 @@ import { LanguageProvider } from "./context/LanguageContext";
 
 import "./index.css";
 import "./App.css";
+import "./styles/agrisense.css";
+import { setupFeedbackSync } from "./services/feedbackService";
+
+setupFeedbackSync();
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {

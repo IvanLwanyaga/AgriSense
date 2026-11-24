@@ -19,6 +19,7 @@ import { SettingsPage } from "../pages/OperationsPage";
 import AgriSenseChat from "./AgriSenseChat";
 import CoffeePriceTicker from "./CoffeePriceTicker";
 import FarmerVoiceAssistant from "./FarmerVoiceAssistant";
+import FeedbackWidget from "./FeedbackWidget";
 import FarmImpactCalculator from "./FarmImpactCalculator";
 import FarmHealthRating from "./FarmHealthRating";
 import CoffeePassportPage from "../pages/CoffeePassportPage";
@@ -32,9 +33,11 @@ import { signOut } from "firebase/auth";
 import { useOfflineSync } from "../hooks/useOfflineSync";
 import { getFarms } from "../services/firestoreService";
 import { fetchBctbWeatherMetrics, fetchFarmWeather } from "../services/weatherService";
+import { getLatestTelemetry } from "../services/iotService";
 import { evaluateWeatherAlerts, recordBctbScreeningAlert } from "../services/alertService";
-import { getLocalAssessmentHistory } from "../services/bctbAssessmentService";
 import { getFollowUpCases } from "../services/bctbAssessmentService";
+import { getResearchScreeningJournal, type ResearchScreeningJournalEntry } from "../services/researchScreeningJournal";
+import type { AgriSenseAiContext } from "../services/aiService";
 import type { FollowUpCase } from "../types/followUp";
 
 const ROLE_PAGES: Record<string, AppPage[]> = {
@@ -119,11 +122,23 @@ export default function EarlyWarningDashboard({
           if (!cancelled && !weather.isFallback) evaluateWeatherAlerts(farm.id, weather);
         }
         if (!cancelled) {
-          const latestByFarm = new Map<string, ReturnType<typeof getLocalAssessmentHistory>[number]>();
-          for (const result of getLocalAssessmentHistory()) {
-            if (result.farmId && !latestByFarm.has(result.farmId)) latestByFarm.set(result.farmId, result);
+          const latestByFarm = new Map<string, ResearchScreeningJournalEntry>();
+          for (const entry of getResearchScreeningJournal(user.uid)) {
+            const farmId = entry.assessment.farmId;
+            if (!farmId || !entry.prediction) continue;
+            if (!latestByFarm.has(farmId)) latestByFarm.set(farmId, entry);
           }
-          latestByFarm.forEach(recordBctbScreeningAlert);
+          latestByFarm.forEach((entry) => {
+            const prediction = entry.prediction!;
+            recordBctbScreeningAlert({
+              id: entry.id,
+              farmId: entry.assessment.farmId,
+              riskLevel: prediction.predicted_risk,
+              safeAdvisory: prediction.actionable_steps,
+              nextSteps: prediction.actionable_steps.join(" "),
+              createdAt: entry.createdAt,
+            });
+          });
         }
       } catch (error) {
         console.warn("Automatic farm alert check could not finish:", error);
@@ -143,7 +158,23 @@ export default function EarlyWarningDashboard({
   }
 
   const pageNavInfo = getNavLabel(page, t);
-  const pageTitle = page === "dashboard" ? `${farmerName.split(" ")[0]}'s ${currentRole === "FARMER" ? t.overview : roleName + " Hub"}` : pageNavInfo.label;
+  const roleHubTitles: Record<string, string> = {
+    FARMER: "Farm overview",
+    AGRICULTURAL_OFFICER: "Officer hub",
+    FARM_MANAGER: "Farm manager hub",
+    ORG_ADMIN: "Cooperative hub",
+    PLATFORM_ADMIN: "Administrator hub",
+    VIEWER: "Research overview",
+  };
+  const pageTitle = page === "dashboard" ? roleHubTitles[currentRole] || "Overview" : pageNavInfo.label;
+  const chatContext: AgriSenseAiContext & Record<string, unknown> = {
+    userUid: user?.uid,
+    role: currentRole,
+    district: profile?.assignedDistrict || "Mukono",
+    subCounty: profile?.assignedSubCounty || "Kyampisi",
+    page,
+    farmerName,
+  };
 
   if (profile && profile.status !== "ACTIVE") {
     return <AccountReviewScreen name={farmerName} status={profile.status} applicationStatus={profile.applicationStatus} onSignOut={handleSignOut} />;
@@ -208,26 +239,26 @@ export default function EarlyWarningDashboard({
       {pages.includes(page) && page === "staff-applications" && <StaffApplicationsPage />}
       {pages.includes(page) && page === "admin-accounts" && <AdminAccountManagementPage />}
       {pages.includes(page) && page === "ai-assistant" && (
-        <AgriSenseChat
-          context={{
-            userUid: user?.uid,
-            role: currentRole,
-            district: profile?.assignedDistrict || "Mukono",
-            subCounty: profile?.assignedSubCounty || "Kyampisi",
-            page,
-            farmerName,
-          } as any}
-        />
+        <AgriSenseChat context={chatContext} />
       )}
     </Shell>
   );
 }
 
-function FarmerScreeningChart() {
-  const history = getLocalAssessmentHistory()
-    .filter((record) => Number.isFinite(Date.parse(record.createdAt)))
+function FarmerScreeningChart({ userId }: { userId?: string }) {
+  const history = (userId ? getResearchScreeningJournal(userId) : [])
+    .filter((entry) => entry.prediction && Number.isFinite(Date.parse(entry.createdAt)))
     .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
-    .slice(-6);
+    .slice(-6)
+    .map((entry) => {
+      const prediction = entry.prediction!;
+      return {
+        id: entry.id,
+        createdAt: entry.createdAt,
+        riskLevel: prediction.predicted_risk,
+        internalScore: Math.round(prediction.class_probabilities[prediction.predicted_risk] * 100),
+      };
+    });
 
   if (!history.length) {
     return (
@@ -244,6 +275,9 @@ function FarmerScreeningChart() {
     return { record, x, y };
   });
   const line = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = chartPoints.length
+    ? `${chartPoints[0].x},132 ${line} ${chartPoints[chartPoints.length - 1].x},132`
+    : "";
 
   return (
     <section className="farmer-screening-chart" aria-labelledby="farmer-screening-chart-title">
@@ -260,6 +294,12 @@ function FarmerScreeningChart() {
         role="img"
         aria-label={`BCTB screening score trend. Latest result is ${history[history.length - 1].riskLevel} risk, score ${history[history.length - 1].internalScore} out of 100.`}
       >
+        <defs>
+          <linearGradient id="riskAreaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3f9163" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#3f9163" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
         {[0, 50, 100].map((score) => {
           const y = 132 - score * 1.08;
           return (
@@ -269,6 +309,9 @@ function FarmerScreeningChart() {
             </g>
           );
         })}
+        <line x1="38" x2="452" y1="78" y2="78" className="farmer-screening-chart-target" />
+        <text x="452" y="74" textAnchor="end" className="farmer-screening-chart-target-label">moderate</text>
+        <polygon points={area} fill="url(#riskAreaGradient)" />
         <polyline points={line} className="farmer-screening-chart-line" />
         {chartPoints.map(({ record, x, y }) => (
           <g key={`${record.createdAt}-${record.id || record.internalScore}`}>
@@ -301,6 +344,120 @@ function FarmerScreeningChart() {
   );
 }
 
+function ScreeningOutcomeDonut({ entries }: { entries: ResearchScreeningJournalEntry[] }) {
+  const predictions = entries
+    .map((entry) => entry.prediction)
+    .filter((prediction): prediction is ResearchBctbPrediction => Boolean(prediction));
+  const counts = { LOW: 0, MODERATE: 0, HIGH: 0 };
+  predictions.forEach((prediction) => {
+    counts[prediction.predicted_risk] += 1;
+  });
+  const total = predictions.length;
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const segments = [
+    { key: "LOW", label: "Low", color: "#3f9163", value: counts.LOW },
+    { key: "MODERATE", label: "Moderate", color: "#d9a12b", value: counts.MODERATE },
+    { key: "HIGH", label: "High", color: "#c95548", value: counts.HIGH },
+  ];
+  let offset = 0;
+
+  return (
+    <section className="panel donut-card">
+      <div className="panel-header">
+        <div>
+          <span className="section-kicker">Screening outcomes</span>
+          <h3>Risk mix</h3>
+        </div>
+      </div>
+      {total === 0 ? (
+        <div className="donut-empty">
+          <strong>No screenings yet</strong>
+          <p>Your low, moderate and high results will appear here after your first screening.</p>
+        </div>
+      ) : (
+        <div className="donut-wrap">
+          <svg
+            viewBox="0 0 140 140"
+            role="img"
+            aria-label={`${total} screenings: ${counts.LOW} low, ${counts.MODERATE} moderate, ${counts.HIGH} high risk`}
+          >
+            <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef2ec" strokeWidth="18" />
+            {segments.map((segment) => {
+              const length = total ? (segment.value / total) * circumference : 0;
+              const dash = `${length} ${circumference - length}`;
+              const circle = (
+                <circle
+                  key={segment.key}
+                  cx="70"
+                  cy="70"
+                  r={radius}
+                  fill="none"
+                  stroke={segment.color}
+                  strokeWidth="18"
+                  strokeDasharray={dash}
+                  strokeDashoffset={-offset}
+                  transform="rotate(-90 70 70)"
+                />
+              );
+              offset += length;
+              return circle;
+            })}
+            <text x="70" y="68" textAnchor="middle" className="donut-total">{total}</text>
+            <text x="70" y="86" textAnchor="middle" className="donut-label">screenings</text>
+          </svg>
+          <ul className="donut-legend">
+            {segments.map((segment) => (
+              <li key={segment.key}>
+                <i style={{ background: segment.color }} />
+                <span>{segment.label}</span>
+                <strong>{segment.value}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RainfallCard({ weather }: { weather: WeatherMetrics | null }) {
+  const points = weather
+    ? [
+        { label: "7 days", value: weather.cumulativeRainfall7dMm },
+        { label: "14 days", value: weather.cumulativeRainfall14dMm },
+        { label: "30 days", value: weather.cumulativeRainfall30dMm },
+      ]
+    : [];
+  const max = Math.max(1, ...points.map((point) => point.value));
+
+  return (
+    <section className="panel rainfall-card">
+      <div className="panel-header">
+        <div>
+          <span className="section-kicker">Rainfall</span>
+          <h3>Recent totals</h3>
+        </div>
+      </div>
+      {weather ? (
+        <div className="rain-bars" role="img" aria-label="Rainfall totals for 7, 14 and 30 days">
+          {points.map((point) => (
+            <div className="rain-bar-col" key={point.label}>
+              <span className="rain-bar-value">{Math.round(point.value)} mm</span>
+              <span className="rain-bar-track">
+                <span className="rain-bar-fill" style={{ height: `${Math.max(6, (point.value / max) * 100)}%` }} />
+              </span>
+              <small>{point.label}</small>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="today-loading">Rainfall totals appear when weather data is available.</p>
+      )}
+    </section>
+  );
+}
+
 function RoleHome({
   role,
   farmerName,
@@ -322,11 +479,15 @@ function RoleHome({
 }) {
   const [farms, setFarms] = useState<Farm[]>([]);
   const [weather, setWeather] = useState<WeatherMetrics | null>(null);
+  const [weatherError, setWeatherError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     getFarms(userUid).then((loaded) => {
-      if (isMounted) setFarms(loaded);
+      if (isMounted) {
+        setFarms(loaded);
+        if (!loaded.length) setWeatherError(false);
+      }
       if (loaded.length > 0) {
         const lat = loaded[0].location?.latitude || 0.3542;
         const lon = loaded[0].location?.longitude || 32.7531;
@@ -334,147 +495,330 @@ function RoleHome({
           .then((wx) => {
             if (isMounted) setWeather(wx);
           })
-          .catch(() => {});
+          .catch(() => {
+            if (isMounted) setWeatherError(true);
+          });
       }
     });
     return () => {
       isMounted = false;
     };
-  }, [userUid, district, subCounty]);
+  }, [userUid, district, subCounty, farms.length]);
 
   // FARMER ROLE VIEW
   if (role === "FARMER") {
+    const firstName = farmerName.split(" ")[0];
+    const telemetry = farms[0] ? getLatestTelemetry(farms[0].id) : null;
+    const moistureState = telemetry
+      ? telemetry.soilMoisture < 25
+        ? "Dry"
+        : telemetry.soilMoisture > 55
+          ? "Wet"
+          : "Adequate"
+      : "No data";
+    const tempState = telemetry
+      ? telemetry.ambientTemperature >= 22 && telemetry.ambientTemperature <= 30
+        ? "Comfortable"
+        : "Check"
+      : "No data";
+    const humidityState = telemetry
+      ? telemetry.relativeHumidity >= 50 && telemetry.relativeHumidity <= 85
+        ? "Healthy"
+        : "Check"
+      : "No data";
+    const journalEntries = userUid ? getResearchScreeningJournal(userUid) : [];
+    const savedEntry = journalEntries.find((entry) => entry.prediction) ?? null;
+    const sessionPrediction = latestResearchPrediction;
+    const riskLabel = sessionPrediction
+      ? `${sessionPrediction.predicted_risk.charAt(0)}${sessionPrediction.predicted_risk.slice(1).toLowerCase()} risk`
+      : "";
+    const riskProbability = sessionPrediction
+      ? Math.round(sessionPrediction.class_probabilities[sessionPrediction.predicted_risk] * 100)
+      : 0;
+    const savedRiskLabel = savedEntry?.prediction
+      ? `${savedEntry.prediction.predicted_risk.charAt(0)}${savedEntry.prediction.predicted_risk.slice(1).toLowerCase()} risk`
+      : "";
+    const savedDate = savedEntry
+      ? new Date(savedEntry.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "";
+    const savedScore = savedEntry?.prediction
+      ? Math.round(savedEntry.prediction.class_probabilities[savedEntry.prediction.predicted_risk] * 100)
+      : 0;
+
     return (
       <div className="role-dashboard farmer-view">
-        {/* Welcome Banner */}
-        <section className="role-welcome panel">
-          <div>
-            <span className="section-kicker">ROBUSTA COFFEE PRODUCER HUB</span>
-            <h2>Welcome back, {farmerName.split(" ")[0]}!</h2>
+        <section className="farmer-hero">
+          <div className="farmer-hero-copy">
+            <span className="section-kicker">Robusta coffee farmer hub</span>
+            <h2>Welcome back, {firstName}</h2>
             <p>
-              Scout your coffee trees, record twig observations, and get safe non-chemical cultural mitigation guidance before damage spreads.
+              Check your coffee trees for twig borer, get clear next steps, and keep every farm
+              record in one place.
             </p>
-          </div>
-          <div className="location-chip">
-            <span>📍 {district} District</span>
-            {subCounty && <small>{subCounty} Sub-County</small>}
-          </div>
-        </section>
-
-        {/* Quick Action Cards Grid */}
-        <section className="role-home-grid" style={{ marginBottom: 20 }}>
-          <button
-            className="role-home-card panel"
-            type="button"
-            onClick={() => onNavigate("bctb-assessment")}
-            style={{ borderLeft: "4px solid #1976d2" }}
-          >
-            <span className="section-kicker">Research model experiment</span>
-            <h3>◎ {t.bctbScreening}</h3>
-            <p>Submit the seven required observations to the synthetic-label Logistic Regression model. This is not a diagnosis.</p>
-            <strong>{t.startScreeningBtn} <span>→</span></strong>
-          </button>
-
-          <button
-            className="role-home-card panel"
-            type="button"
-            onClick={() => onNavigate("help-room")}
-            style={{ borderLeft: "4px solid #ed6c02" }}
-          >
-            <span className="section-kicker">Extension Community</span>
-            <h3>💬 {t.helpRoom}</h3>
-            <p>Inquire directly from agricultural extension officers and lead farmers for guidance.</p>
-            <strong>{t.askAnOfficer} <span>→</span></strong>
-          </button>
-
-          <button
-            className="role-home-card panel"
-            type="button"
-            onClick={() => onNavigate("farms")}
-            style={{ borderLeft: "4px solid #9c27b0" }}
-          >
-            <span className="section-kicker">Farm Register</span>
-            <h3>🌱 {t.myFarms} ({farms.length})</h3>
-            <p>Manage your coffee plots, tree counts, clonal varieties, and planting blocks.</p>
-            <strong>{t.viewFarms} <span>→</span></strong>
-          </button>
-        </section>
-
-        {/* Latest Screening Card */}
-        <section className="panel farmer-latest-risk">
-          <div className="panel-header">
-            <div>
-              <span className="section-kicker">{t.currentScreening}</span>
-              <h3>{latestResearchPrediction
-                ? `${latestResearchPrediction.predicted_risk} research-model prediction`
-                : "No Research Model Prediction in this Session"}</h3>
+            <div className="farmer-hero-actions">
+              <button className="primary-button btn-lg" type="button" onClick={() => onNavigate("bctb-assessment")}>
+                {t.startScreeningBtn}
+                <span aria-hidden="true">→</span>
+              </button>
+              <button className="outline-button btn-lg" type="button" onClick={() => onNavigate("help-room")}>
+                {t.askAnOfficer}
+              </button>
             </div>
-            {latestResearchPrediction && (
-              <span className={`risk-badge-sm ${latestResearchPrediction.predicted_risk.toLowerCase()}`}>
-                {(latestResearchPrediction.class_probabilities[latestResearchPrediction.predicted_risk] * 100).toFixed(1)}% model probability
+            <div className="farmer-hero-meta">
+              <span className="farm-pin">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z" />
+                  <circle cx="12" cy="10" r="2.5" />
+                </svg>
+                {district} District{subCounty ? ` · ${subCounty} Sub-County` : ""}
               </span>
+              <span>
+                {farms.length} {farms.length === 1 ? "farm" : "farms"} registered
+              </span>
+            </div>
+          </div>
+
+          <aside className="today-card" aria-label="Today on your farm">
+            <div className="today-card-head">
+              <span className="section-kicker">Today on your farm</span>
+              <span className="today-weather-icon" aria-hidden="true">☀</span>
+            </div>
+            {weather && weather.granularity !== "UNAVAILABLE" ? (
+              <>
+                <strong className="today-temp">{Math.round(weather.tempAvg30dC)}°C</strong>
+                <p className="today-temp-label">average temperature, last 30 days</p>
+                <dl className="today-stats">
+                  <div>
+                    <dt>Rain, 30 days</dt>
+                    <dd>{Math.round(weather.cumulativeRainfall30dMm)} mm</dd>
+                  </div>
+                  <div>
+                    <dt>Dry spell</dt>
+                    <dd className={weather.consecutiveDrySpellDays >= 14 ? "is-warning" : ""}>
+                      {weather.consecutiveDrySpellDays} days
+                    </dd>
+                  </div>
+                </dl>
+              </>
+            ) : weatherError || (weather && weather.granularity === "UNAVAILABLE") ? (
+              <p className="today-loading">Weather is unavailable right now. Try again later.</p>
+            ) : farms.length === 0 ? (
+              <p className="today-loading">
+                Add your first farm to see local weather.{" "}
+                <button className="text-button" type="button" onClick={() => onNavigate("farms")}>
+                  Add a farm <span aria-hidden="true">→</span>
+                </button>
+              </p>
+            ) : (
+              <p className="today-loading">Loading your local weather…</p>
             )}
-          </div>
-          <p>
-            {latestResearchPrediction
-              ? "Research demonstration only: the model was trained on synthetic labels, not verified field outcomes. This is not a diagnosis."
-              : "Run a research model prediction to see the model output here. It will not be used for treatment decisions."}
-          </p>
-
-          <FarmerScreeningChart />
-
-          <FarmImpactCalculator farms={farms} latestRisk={null} />
-          <FarmHealthRating farms={farms} />
-
-          <div style={{ marginTop: 16 }}>
-            <button className="primary-button" onClick={() => onNavigate("bctb-assessment")}>
-              {latestResearchPrediction ? t.updateAssessmentBtn : t.startScreeningBtn} →
+            <button className="text-button today-link" type="button" onClick={() => onNavigate("weather")}>
+              See the full forecast <span aria-hidden="true">→</span>
             </button>
-          </div>
+          </aside>
         </section>
 
-        {/* Agro-Weather & Cultural Checklist Grid */}
-        <div className="dashboard-two-col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginTop: 16 }}>
-          <section className="panel">
-            <span className="section-kicker">Agro-Meteorological Radar</span>
-            <h3>☀️ {t.farmWeather} ({district})</h3>
-            {weather ? (
-              <div className="weather-metric-chips" style={{ marginTop: 12 }}>
-                <div className="wx-chip">
-                  <small>Consecutive Dry Days</small>
-                  <strong className={weather.consecutiveDrySpellDays >= 14 ? "warning-text" : ""}>
-                    {weather.consecutiveDrySpellDays} days
-                  </strong>
-                </div>
-                <div className="wx-chip">
-                  <small>30-Day Rain</small>
-                  <strong>{weather.cumulativeRainfall30dMm} mm</strong>
-                </div>
-                <div className="wx-chip">
-                  <small>Mean Temp</small>
-                  <strong>{weather.tempAvg30dC}°C</strong>
-                </div>
+        <section className="kpi-grid" aria-label="Farm conditions">
+          <article className="kpi-card">
+            <span className="kpi-icon kpi-icon--blue" aria-hidden="true">💧</span>
+            <div className="kpi-copy">
+              <span>Soil moisture</span>
+              <strong>{telemetry ? `${Math.round(telemetry.soilMoisture)}%` : "—"}</strong>
+              <small className={`kpi-state ${moistureState === "Adequate" ? "is-good" : "is-warn"}`}>{moistureState}</small>
+            </div>
+          </article>
+
+          <article className="kpi-card">
+            <span className="kpi-icon kpi-icon--amber" aria-hidden="true">🌡</span>
+            <div className="kpi-copy">
+              <span>Temperature</span>
+              <strong>{telemetry ? `${telemetry.ambientTemperature.toFixed(1)}°C` : "—"}</strong>
+              <small className={`kpi-state ${tempState === "Comfortable" ? "is-good" : "is-warn"}`}>{tempState}</small>
+            </div>
+          </article>
+
+          <article className="kpi-card">
+            <span className="kpi-icon kpi-icon--green" aria-hidden="true">💨</span>
+            <div className="kpi-copy">
+              <span>Humidity</span>
+              <strong>{telemetry ? `${Math.round(telemetry.relativeHumidity)}%` : "—"}</strong>
+              <small className={`kpi-state ${humidityState === "Healthy" ? "is-good" : "is-warn"}`}>{humidityState}</small>
+            </div>
+          </article>
+
+          <article className="kpi-card">
+            <span className="kpi-icon kpi-icon--clay" aria-hidden="true">🌧</span>
+            <div className="kpi-copy">
+              <span>Rain, 30 days</span>
+              <strong>{weather ? `${Math.round(weather.cumulativeRainfall30dMm)} mm` : "—"}</strong>
+              <small className="kpi-state">{weather ? "Regional weather" : "No data"}</small>
+            </div>
+          </article>
+        </section>
+        <p className="kpi-note">Demo sensor values until you connect your field device.</p>
+
+        <section className="quick-grid" aria-label="Quick actions">
+          <button className="quick-card" type="button" onClick={() => onNavigate("bctb-assessment")}>
+            <span className="quick-icon quick-icon--green" aria-hidden="true">◎</span>
+            <span className="quick-copy">
+              <strong>Check my coffee</strong>
+              <small>Seven quick questions about your twigs</small>
+            </span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button className="quick-card" type="button" onClick={() => onNavigate("help-room")}>
+            <span className="quick-icon quick-icon--amber" aria-hidden="true">💬</span>
+            <span className="quick-copy">
+              <strong>Ask an officer</strong>
+              <small>Get advice from an extension officer</small>
+            </span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button className="quick-card" type="button" onClick={() => onNavigate("farms")}>
+            <span className="quick-icon quick-icon--clay" aria-hidden="true">🌱</span>
+            <span className="quick-copy">
+              <strong>{t.myFarms}</strong>
+              <small>{farms.length} registered on your account</small>
+            </span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button className="quick-card" type="button" onClick={() => onNavigate("weather")}>
+            <span className="quick-icon quick-icon--blue" aria-hidden="true">☀</span>
+            <span className="quick-copy">
+              <strong>{t.farmWeather}</strong>
+              <small>Rain and dry-spell outlook</small>
+            </span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
+          </button>
+        </section>
+
+        <div className="farmer-columns">
+          <section className="panel farmer-latest">
+            <div className="panel-header">
+              <div>
+                <span className="section-kicker">{t.currentScreening}</span>
+                <h3>Your latest screening</h3>
               </div>
+              {sessionPrediction ? (
+                <span className={`risk-badge-sm ${sessionPrediction.predicted_risk.toLowerCase()}`}>
+                  {riskProbability}% model score
+                </span>
+              ) : savedEntry ? (
+                <span className={`risk-badge-sm ${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>Saved result</span>
+              ) : null}
+            </div>
+
+            {sessionPrediction ? (
+              <>
+                <div className="farmer-latest-riskline">
+                  <strong className={`risk-text-${sessionPrediction.predicted_risk.toLowerCase()}`}>{riskLabel}</strong>
+                  <span>Research model estimate</span>
+                </div>
+                <p>
+                  This is an early warning based on your answers, not a diagnosis. Ask your
+                  extension officer to confirm what is happening in your field.
+                </p>
+                {sessionPrediction.predicted_risk !== "LOW" && (
+                  <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>
+                    Ask an officer to review this
+                  </button>
+                )}
+              </>
+            ) : savedEntry ? (
+              <>
+                <div className="farmer-latest-riskline">
+                  <strong className={`risk-text-${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>{savedRiskLabel}</strong>
+                  <span>Saved {savedDate} · score {savedScore}/100</span>
+                </div>
+                <p>
+                  This is an early warning based on your answers, not a diagnosis. Ask your
+                  extension officer to confirm what is happening in your field.
+                </p>
+                {savedEntry.prediction && savedEntry.prediction.predicted_risk !== "LOW" && (
+                  <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>
+                    Ask an officer to review this
+                  </button>
+                )}
+              </>
             ) : (
-              <p style={{ marginTop: 8 }}>Loading weather context for your Robusta block...</p>
+              <div className="farmer-empty">
+                <span className="farmer-empty-icon" aria-hidden="true">◎</span>
+                <strong>No screening yet</strong>
+                <p>Start a two-minute check to see your risk level and what to do next.</p>
+              </div>
             )}
-            <button className="outline-button-sm" style={{ marginTop: 12 }} onClick={() => onNavigate("weather")}>
-              View 14-Day Detailed Forecast →
-            </button>
+
+            <FarmerScreeningChart userId={userUid} />
+
+            <div className="farmer-latest-actions">
+              <button
+                className={sessionPrediction || savedEntry ? "outline-button" : "primary-button"}
+                type="button"
+                onClick={() => onNavigate("bctb-assessment")}
+              >
+                {sessionPrediction || savedEntry ? t.updateAssessmentBtn : t.startScreeningBtn}
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+
+            <p className="fine-print">
+              Screening is an early warning, not a diagnosis. Confirm with your sub-county
+              agricultural extension officer.
+            </p>
           </section>
 
-          <section className="panel">
-            <span className="section-kicker">Cultural Management Standard</span>
-            <h3>✂️ NARO BCTB Sanitary Checklist</h3>
-            <ul style={{ paddingLeft: 20, margin: "8px 0", fontSize: "0.9rem", lineHeight: 1.6 }}>
-              <li><strong>Pruning:</strong> Clip infested twigs 5cm (2 inches) below the lowest beetle hole.</li>
-              <li><strong>Sanitation:</strong> Collect all clipped twigs in sacks immediately; burn off-field.</li>
-              <li><strong>Desuckering:</strong> Remove excess water suckers from the stem base.</li>
-              <li><strong>Shade:</strong> Regulate canopy to 30–40% filtered light.</li>
+          <section className="panel farmer-checklist">
+            <span className="section-kicker">Cultural management standard</span>
+            <h3>NARO BCTB sanitary checklist</h3>
+            <ul className="checklist">
+              <li>
+                <span className="check" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Prune</strong>
+                  <p>Clip infested twigs 5 cm (2 inches) below the lowest beetle hole.</p>
+                </div>
+              </li>
+              <li>
+                <span className="check" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Burn</strong>
+                  <p>Collect clipped twigs in sacks and burn them off the farm.</p>
+                </div>
+              </li>
+              <li>
+                <span className="check" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Desucker</strong>
+                  <p>Remove excess water suckers growing from the stem base.</p>
+                </div>
+              </li>
+              <li>
+                <span className="check" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Regulate shade</strong>
+                  <p>Keep canopy at 30–40% filtered light for a healthy microclimate.</p>
+                </div>
+              </li>
             </ul>
+            <button className="outline-button" type="button" onClick={() => onNavigate("activities")}>
+              Record this work in my journal
+            </button>
           </section>
         </div>
 
+        <div className="farmer-insights">
+          <ScreeningOutcomeDonut entries={journalEntries} />
+          <RainfallCard weather={weather} />
+          {farms.length > 0 && (
+            <>
+              <FarmImpactCalculator farms={farms} latestRisk={null} />
+              <FarmHealthRating farms={farms} />
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -504,7 +848,6 @@ function RoleHome({
             className="role-home-card panel"
             type="button"
             onClick={() => onNavigate("governance")}
-            style={{ borderLeft: "4px solid #9c27b0" }}
           >
             <span className="section-kicker">System Governance</span>
             <h3>⚖️ Rules & Model Registry</h3>
@@ -516,7 +859,6 @@ function RoleHome({
             className="role-home-card panel"
             type="button"
             onClick={() => onNavigate("extension")}
-            style={{ borderLeft: "4px solid #2e7d32" }}
           >
             <span className="section-kicker">Operations</span>
             <h3>📋 Extension Operations</h3>
@@ -528,7 +870,6 @@ function RoleHome({
             className="role-home-card panel"
             type="button"
             onClick={() => onNavigate("help-room")}
-            style={{ borderLeft: "4px solid #ed6c02" }}
           >
             <span className="section-kicker">Community Moderation</span>
             <h3>💬 Help Room Supervision</h3>
@@ -757,16 +1098,18 @@ function Shell({
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">A</span>
           <div>
-            <span>AgriSense-BCTB</span>
-            <small className="brand-country">Uganda · Robusta Coffee</small>
+            <span>AgriSense</span>
+            <small className="brand-country">Robusta Coffee · Uganda</small>
           </div>
         </div>
 
-        <p className="workspace-label">{currentRole} {t.overview}</p>
+        <p className="workspace-label">{currentRole} workspace</p>
 
         <nav className="nav-list" aria-label="AgriSense navigation">
           <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="⌂">
@@ -789,28 +1132,36 @@ function Shell({
         </nav>
 
         <div className="sidebar-footer">
-          <button className="signout-btn" onClick={onSignOut} type="button">
-            {t.signOut}
+          <button className="signout-btn" onClick={onSignOut} type="button" aria-label={t.signOut}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 4H5v16h4" />
+              <path d="M16 8l4 4-4 4" />
+              <path d="M20 12H9" />
+            </svg>
+            <span className="signout-label">{t.signOut}</span>
           </button>
         </div>
       </aside>
 
-      <main className="main-content">
+      <main className="main-content" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div>
-            <p className="eyebrow">Explainable Decision Support · Robusta Coffee (Coffea canephora)</p>
+            <p className="eyebrow">Explainable decision support · Robusta coffee</p>
             <h1>{title}</h1>
           </div>
 
           <div className="topbar-right">
-            {/* Language Switcher */}
-            <div className="workspace-language" title="Change application language" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span aria-hidden="true">🌐</span>
+            <div className="language-picker" title="Change application language">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18" />
+                <path d="M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z" />
+              </svg>
               <select
+                className="language-select"
                 value={language}
                 onChange={(event) => onLanguageChange(event.target.value as SupportedLanguage)}
                 aria-label="Workspace language"
-                style={{ fontWeight: 600, padding: "4px 8px", borderRadius: 6, border: "1px solid #ccc" }}
               >
                 <option value="en">English (EN)</option>
                 <option value="lg">Luganda (LG)</option>
@@ -819,25 +1170,25 @@ function Shell({
               </select>
             </div>
 
-            {/* Online / Offline Sync Indicator */}
             {syncStatus.isOnline ? (
-              <span className="telemetry-badge" style={{ backgroundColor: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9" }}>
-                <span className="dot" style={{ backgroundColor: "#2e7d32" }} />
+              <span className="sync-pill sync-pill--online">
+                <span className="dot" />
                 {syncStatus.pendingCount > 0 ? (
-                  <button type="button" className="text-button" onClick={() => void syncStatus.syncNow()}>
-                    {syncStatus.pendingCount} {t.syncPending} (Click to Sync)
+                  <button type="button" className="sync-pill-action" onClick={() => void syncStatus.syncNow()}>
+                    {syncStatus.pendingCount} to sync · Sync now
                   </button>
                 ) : (
-                  t.onlineStatus
+                  "Online"
                 )}
               </span>
             ) : (
-              <span className="telemetry-badge" style={{ backgroundColor: "#fff3e0", color: "#e65100", border: "1px solid #ffe0b2" }}>
-                <span className="dot" style={{ backgroundColor: "#e65100" }} />
-                {t.offlineStatus} ({syncStatus.pendingCount} saved)
+              <span className="sync-pill sync-pill--offline">
+                <span className="dot" />
+                Offline · {syncStatus.pendingCount} saved
               </span>
             )}
 
+            <FeedbackWidget />
             <span className="user-role-pill">{currentRole}</span>
           </div>
         </header>
@@ -860,8 +1211,13 @@ function NavButton({
   children: ReactNode;
 }) {
   return (
-    <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick} type="button">
-      <span>{icon}</span>
+    <button
+      className={`nav-item ${active ? "active" : ""}`}
+      onClick={onClick}
+      type="button"
+      aria-current={active ? "page" : undefined}
+    >
+      <span aria-hidden="true">{icon}</span>
       {children}
     </button>
   );

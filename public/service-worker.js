@@ -1,4 +1,4 @@
-const CACHE_NAME = "agrisense-shell-v1";
+const CACHE_NAME = "agrisense-shell-v3";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/favicon.svg", "/icons.svg"];
 
 self.addEventListener("install", (event) => {
@@ -11,6 +11,43 @@ self.addEventListener("activate", (event) => {
     keys.filter((key) => key.startsWith("agrisense-shell-") && key !== CACHE_NAME).map((key) => caches.delete(key)),
   )));
   self.clients.claim();
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+  const title = notification.title || data.title || "AgriSense";
+  const body = notification.body || data.body || "You have a new AgriSense update.";
+  const url = data.url || "/";
+  const tag = data.tag || "agrisense-alert";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: notification.icon || "/favicon.svg",
+      badge: "/favicon.svg",
+      tag,
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url ? event.notification.data.url : "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
 });
 
 self.addEventListener("fetch", (event) => {

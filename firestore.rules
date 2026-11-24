@@ -291,6 +291,20 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
     }
 
+    // Web push subscriptions are written by the Cloud Function after token verification.
+    match /pushSubscriptions/{token} {
+      allow read, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create, update: if false;
+    }
+
+    // Pilot feedback from farmers and staff.
+    match /feedback/{feedbackId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['userId', 'rating', 'category', 'message', 'contact', 'createdAt', 'appVersion'])
+        && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
     // Shared coffee help room. Verified users can read and participate.
     match /helpQuestions/{questionId} {
       allow read: if isEmailVerified();

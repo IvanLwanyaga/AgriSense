@@ -1,12 +1,18 @@
 {
-  "name": "AgriSense BCTB Early Warning",
+  "id": "/",
+  "name": "AgriSense — Coffee Twig Borer Early Warning",
   "short_name": "AgriSense",
-  "description": "Offline-friendly coffee farm screening and extension support.",
+  "description": "Offline-friendly coffee farm screening, weather insight, and extension support for Robusta farmers in Uganda.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f7f3",
-  "theme_color": "#24513c",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f7f2",
+  "theme_color": "#173d2b",
+  "categories": ["agriculture", "productivity", "utilities"],
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

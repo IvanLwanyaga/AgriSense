@@ -54,6 +54,20 @@ export function saveResearchScreeningEntry(
   return entry;
 }
 
+export function updateLatestResearchScreeningPrediction(
+  userId: string,
+  prediction: ResearchBctbPrediction,
+): ResearchScreeningJournalEntry[] {
+  const entries = getResearchScreeningJournal(userId);
+  if (!entries.length) return entries;
+  const updated: ResearchScreeningJournalEntry[] = [
+    { ...entries[0], status: "COMPLETE" as const, prediction },
+    ...entries.slice(1),
+  ];
+  write(userId, updated);
+  return updated;
+}
+
 export function completeQueuedResearchScreening(
   userId: string,
   queueId: string,

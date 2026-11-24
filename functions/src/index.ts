@@ -850,6 +850,15 @@ export const submitBctbAssessment = onRequest(
         }
       });
 
+      if (riskResult.riskLevel === "HIGH") {
+        await sendPushToUser(user.uid, {
+          title: "High BCTB risk screening",
+          body: "Your recent screening indicates high risk. Open AgriSense to review alerts, prune affected twigs, and contact your extension officer.",
+          url: "/",
+          tag: `bctb-${assessmentId}`,
+        });
+      }
+
       response.json({
         success: true,
         assessmentId,
@@ -1385,7 +1394,127 @@ export const sendSmsBroadcast = onRequest(
 );
 
 /**
- * 7. adminUpdateRules: Administrator rule version activation with audit logging
+ * 7. Web Push: store device tokens and send browser notifications.
+ */
+async function sendPushToUser(
+  userId: string,
+  payload: { title: string; body: string; url?: string; tag?: string },
+): Promise<number> {
+  try {
+    const { db } = await getDb();
+    const snapshot = await db.collection("pushSubscriptions").where("userId", "==", userId).limit(5).get();
+    const tokens = snapshot.docs
+      .map((docSnap) => docSnap.get("token"))
+      .filter((token): token is string => typeof token === "string" && token.length > 0);
+    if (!tokens.length) return 0;
+
+    const { getMessaging } = await import("firebase-admin/messaging");
+    const messaging = getMessaging();
+    const result = await messaging.sendEachForMulticast({
+      tokens,
+      notification: { title: payload.title, body: payload.body },
+      webpush: {
+        fcmOptions: { link: payload.url || "/" },
+        notification: { icon: "/favicon.svg", tag: payload.tag || "agrisense-alert" },
+      },
+      data: { url: payload.url || "/" },
+    });
+
+    const invalidTokens: string[] = [];
+    result.responses.forEach((entry, index) => {
+      if (!entry.success) invalidTokens.push(tokens[index]);
+    });
+    if (invalidTokens.length) {
+      await Promise.all(
+        invalidTokens.map((token) => db.collection("pushSubscriptions").doc(token).delete().catch(() => undefined)),
+      );
+    }
+    return result.successCount;
+  } catch (error) {
+    console.warn("Could not send web push notification", error);
+    return 0;
+  }
+}
+
+export const pushSubscribe = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+    const user = await requireUser(request, response);
+    if (!user) return;
+
+    try {
+      const { token } = request.body || {};
+      if (typeof token !== "string" || token.length < 20) {
+        response.status(400).json({ error: "A valid push token is required." });
+        return;
+      }
+      const { db, FieldValue } = await getDb();
+      await db.collection("pushSubscriptions").doc(token).set({
+        token,
+        userId: user.uid,
+        role: user.role,
+        userAgent: request.get("user-agent") || "",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      response.json({ success: true });
+    } catch (error) {
+      console.error("Could not store push subscription", error);
+      response.status(500).json({ error: "Could not register push notifications." });
+    }
+  },
+);
+
+export const pushUnsubscribe = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+    const user = await requireUser(request, response);
+    if (!user) return;
+
+    try {
+      const { token } = request.body || {};
+      if (typeof token === "string" && token.length > 0) {
+        const { db } = await getDb();
+        await db.collection("pushSubscriptions").doc(token).delete().catch(() => undefined);
+      }
+      response.json({ success: true });
+    } catch (error) {
+      console.error("Could not remove push subscription", error);
+      response.status(500).json({ error: "Could not disable push notifications." });
+    }
+  },
+);
+
+export const pushTest = onRequest(
+  { cors: true },
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+    const user = await requireUser(request, response);
+    if (!user) return;
+
+    const sent = await sendPushToUser(user.uid, {
+      title: "AgriSense test notification",
+      body: "Push notifications are working on this device.",
+      url: "/",
+      tag: "agrisense-test",
+    });
+    response.json({ success: sent > 0, sent });
+  },
+);
+
+/**
+ * 8. adminUpdateRules: Administrator rule version activation with audit logging
  */
 export const adminUpdateRules = onRequest(
   { cors: true },

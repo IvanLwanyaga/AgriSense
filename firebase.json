@@ -98,6 +98,27 @@
         }
       },
       {
+        "source": "/api/pushSubscribe",
+        "function": {
+          "functionId": "pushSubscribe",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/pushUnsubscribe",
+        "function": {
+          "functionId": "pushUnsubscribe",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/pushTest",
+        "function": {
+          "functionId": "pushTest",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "/api/adminUpdateRules",
         "function": {
           "functionId": "adminUpdateRules",

@@ -46,7 +46,7 @@ export async function predictResearchBctbRisk(
     body: JSON.stringify({ modelInputs, includeCounterfactual: options.includeCounterfactual !== false }),
   });
   const responseText = await response.text();
-  let payload: unknown = {};
+  let payload: unknown;
   try {
     payload = responseText ? JSON.parse(responseText) as unknown : {};
   } catch {
@@ -74,7 +74,7 @@ export async function predictResearchBctbRisk(
     !isRiskLevel(prediction.predicted_risk)
     || !isProbabilityRecord(prediction.class_probabilities)
     || !Array.isArray(contributions)
-    || contributions.length !== RESEARCH_MODEL_FEATURE_COUNT
+    || contributions.length === 0
     || !contributions.every(isShapContribution)
     || !Array.isArray(prediction.actionable_steps)
     || prediction.actionable_steps.length === 0

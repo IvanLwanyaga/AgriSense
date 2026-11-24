@@ -4,8 +4,6 @@ requests>=2.31
 fastapi
 uvicorn[standard]
 joblib
-scikit-learn
-numpy
-pandas
+scikit-learn==1.9.0
 xgboost
 shap

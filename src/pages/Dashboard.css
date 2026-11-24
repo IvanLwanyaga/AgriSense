@@ -1106,3 +1106,16 @@ select:focus-visible {
     gap: 7px;
   }
 }
+
+/* Dashboard visual override */
+.app-shell .sidebar {
+  background: #123b2b !important;
+  background-color: #123b2b !important;
+  color: #ffffff !important;
+}
+
+.app-shell .sidebar a,
+.app-shell .sidebar button,
+.app-shell .sidebar span {
+  color: inherit;
+}

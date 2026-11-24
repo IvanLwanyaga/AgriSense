@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { predictResearchBctbRisk } from "../services/researchBctbModelService";
+import { buildLocalResearchPredictionFromInputs } from "../services/localBctbPrediction";
 import type { ResearchBctbModelInputs, ResearchBctbPrediction } from "../types/bctb";
 
 const RISK_LABELS = { HIGH: "High", MODERATE: "Moderate", LOW: "Low" } as const;
@@ -40,12 +41,23 @@ export default function WhatIfRiskExplorer({
   async function compareScenario() {
     setBusy(true); setError("");
     try {
-      setResult(await predictResearchBctbRisk({
+      const nextInputs = {
         ...inputs,
         farm_sanitation: sanitation,
         pruning_frequency: pruning,
         rainfall_30d_mm: includeRainfall ? rainfall : inputs.rainfall_30d_mm,
-      }, { includeCounterfactual: false }));
+      };
+      let nextResult;
+      try {
+        nextResult = await predictResearchBctbRisk(nextInputs, { includeCounterfactual: false });
+      } catch (predictionError) {
+        console.warn(
+          "What-if prediction service unavailable; using the local AgriSense rule engine.",
+          predictionError,
+        );
+        nextResult = buildLocalResearchPredictionFromInputs(nextInputs);
+      }
+      setResult(nextResult);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The what-if comparison is unavailable.");
     } finally { setBusy(false); }

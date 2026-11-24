@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/useAuth";
 import { setCurrentUserSmsConsent } from "../services/firestoreService";
+import PushNotificationsCard from "../components/PushNotificationsCard";
 
 type SettingsSection = "account" | "notifications" | "offline" | "privacy";
 
@@ -95,6 +96,7 @@ export function SettingsPage() {
               <PreferenceToggle title="Critical BCTB risk alerts" description="Highlight elevated screening results that need prompt field review." checked={criticalAlerts} onChange={setCriticalAlerts} />
               <PreferenceToggle title="Weather advisories" description="Show rainfall and dry-spell notices for your registered farms." checked={weatherAlerts} onChange={setWeatherAlerts} />
               <PreferenceToggle title="Extension follow-up updates" description="Show progress when you consent to an officer verification referral." checked={extensionFollowUp} onChange={setExtensionFollowUp} />
+              <PushNotificationsCard />
             </div>
           )}
 

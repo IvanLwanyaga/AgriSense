@@ -8,10 +8,12 @@ import {
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/useAuth";
 import { predictResearchBctbRisk } from "../services/researchBctbModelService";
+import { buildLocalResearchPrediction, buildWeatherSnapshot } from "../services/localBctbPrediction";
 import { queueResearchPrediction } from "../services/offlineSyncService";
+import { sendRealSmsAlert } from "../services/smsService";
 import { getResearchPredictionQueue } from "../services/storage/indexedDbService";
 import WhatIfRiskExplorer from "../components/WhatIfRiskExplorer";
-import { completeQueuedResearchScreening, getResearchScreeningJournal, saveResearchScreeningEntry, type ResearchScreeningJournalEntry } from "../services/researchScreeningJournal";
+import { completeQueuedResearchScreening, getResearchScreeningJournal, saveResearchScreeningEntry, updateLatestResearchScreeningPrediction, type ResearchScreeningJournalEntry } from "../services/researchScreeningJournal";
 import type {
   BctbAssessmentInput,
   BctbFieldReadings,
@@ -447,8 +449,8 @@ export default function BctbAssessmentPage({
 }: {
   onResult?: (result: ResearchBctbPrediction) => void;
 }) {
-  const { t } = useLanguage();
-  const { user } = useAuth();
+  const { t, language } = useLanguage();
+  const { user, profile } = useAuth();
 
   const [mode, setMode] = useState<Mode>(() => {
     try {
@@ -674,11 +676,37 @@ export default function BctbAssessmentPage({
         await saveForSync();
         return;
       }
-      const prediction = await predictResearchBctbRisk(modelInputs);
+      let prediction: ResearchBctbPrediction;
+      try {
+        prediction = await predictResearchBctbRisk(modelInputs);
+      } catch (predictionError) {
+        console.warn(
+          "Prediction service unavailable; using the local AgriSense rule engine.",
+          predictionError,
+        );
+        prediction = buildLocalResearchPrediction(
+          assessment,
+          buildWeatherSnapshot(assessment.fieldReadings),
+          language,
+        );
+      }
       saveResearchScreeningEntry(user?.uid || "", assessment, modelInputs, prediction);
       if (user?.uid) setVisitJournal(getResearchScreeningJournal(user.uid));
       setResult(prediction);
       onResult?.(prediction);
+      if (prediction.predicted_risk === "HIGH" && profile?.smsConsent && profile.phone) {
+        void sendRealSmsAlert({
+          recipientPhone: profile.phone,
+          farmerName: profile.fullName || "Farmer",
+          farmName: "your coffee farm",
+          category: "BCTB_EARLY_WARNING",
+          shortAdvice: "High BCTB risk screening. Prune and burn affected twigs, then ask your extension officer to verify.",
+          lang: language,
+          farmerId: user?.uid,
+        }).catch((smsError: unknown) => {
+          console.warn("Could not send the BCTB SMS alert", smsError);
+        });
+      }
     } catch (error) {
       if (!navigator.onLine && (error instanceof TypeError || error instanceof DOMException)) {
         try { await saveForSync(); return; }
@@ -692,6 +720,29 @@ export default function BctbAssessmentPage({
         error instanceof Error
           ? error.message
           : "The research model could not return a prediction. Check your connection and try again."
+      );
+    } finally {
+      setCalculating(false);
+    }
+  }
+
+  async function retryModelPrediction() {
+    const retryInputs = toResearchModelInputs(assessment);
+    if (!retryInputs || !user?.uid) return;
+    setCalculating(true);
+    setModelError("");
+    setOfflineQueued("");
+    try {
+      const prediction = await predictResearchBctbRisk(retryInputs);
+      updateLatestResearchScreeningPrediction(user.uid, prediction);
+      setVisitJournal(getResearchScreeningJournal(user.uid));
+      setResult(prediction);
+      onResult?.(prediction);
+    } catch (error) {
+      setModelError(
+        error instanceof Error
+          ? error.message
+          : "The trained model is still unavailable. Please try again later.",
       );
     } finally {
       setCalculating(false);
@@ -1274,6 +1325,23 @@ export default function BctbAssessmentPage({
               {result.predicted_risk === "HIGH" ? "!" : result.predicted_risk === "MODERATE" ? "~" : "✓"}
             </span>
           </div>
+
+          {result.model_name.includes("Local") && (
+            <div className="local-fallback-notice">
+              <p className="settings-info-card">
+                <strong>Computed on your device</strong> The prediction service was unavailable, so this
+                screening used the AgriSense expert rule engine. It is still an early warning, not a diagnosis.
+              </p>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => void retryModelPrediction()}
+                disabled={calculating}
+              >
+                {calculating ? "Retrying…" : "Retry trained model"}
+              </button>
+            </div>
+          )}
 
           <div className="research-actions">
             <h4>What to do next</h4>

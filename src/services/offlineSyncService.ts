@@ -18,7 +18,8 @@ import {
   updateResearchPredictionQueue,
 } from "./storage/indexedDbService";
 import { predictResearchBctbRisk } from "./researchBctbModelService";
-import type { ResearchBctbModelInputs } from "../types/bctb";
+import { buildLocalResearchPredictionFromInputs } from "./localBctbPrediction";
+import type { ResearchBctbModelInputs, ResearchBctbPrediction } from "../types/bctb";
 
 export type { SyncState };
 
@@ -113,7 +114,16 @@ export function syncResearchPredictionQueue() {
     for (const item of queue.filter((entry) => !entry.synced).sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
       if (auth.currentUser?.uid !== userId) break;
       try {
-        const result = await predictResearchBctbRisk(item.inputs);
+        let result: ResearchBctbPrediction;
+        try {
+          result = await predictResearchBctbRisk(item.inputs);
+        } catch (predictionError) {
+          console.warn(
+            "Prediction service unavailable during sync; using the local AgriSense rule engine.",
+            predictionError,
+          );
+          result = buildLocalResearchPredictionFromInputs(item.inputs);
+        }
         await updateResearchPredictionQueue({ ...item, synced: true, result, error: undefined });
         window.dispatchEvent(new CustomEvent("agrisense:research-prediction-synced", { detail: { userId, id: item.id, result } }));
         syncedCount += 1;
@@ -186,8 +196,10 @@ async function syncPendingQueue(): Promise<{
         });
       }
 
-      const { optionalPhotoUrl: _localPhoto, ...assessmentFields } = item.assessment;
-      const { optionalPhotoUrl: _resultPhoto, ...riskResult } = item.riskResult;
+      const assessmentFields: Record<string, unknown> = { ...item.assessment };
+      delete assessmentFields.optionalPhotoUrl;
+      const riskResult: Record<string, unknown> = { ...item.riskResult };
+      delete riskResult.optionalPhotoUrl;
       const response = await authenticatedFetch("/api/submitBctbAssessment", {
         method: "POST",
         body: JSON.stringify({
