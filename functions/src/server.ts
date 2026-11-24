@@ -285,6 +285,37 @@ app.post(
 
 
 // BCTB prediction endpoint
+app.get(
+  "/api/modelHealth",
+  async (req: Request, res: Response): Promise<void> => {
+    if (!MODEL_API_URL) {
+      res.status(503).json({ ok: false, error: "RESEARCH_MODEL_API_URL is not configured." });
+      return;
+    }
+    try {
+      const healthUrl = new URL("/health", MODEL_API_URL);
+      const upstream = await fetch(healthUrl, { signal: AbortSignal.timeout(8000) });
+      const text = await upstream.text();
+      let model: unknown = null;
+      try {
+        model = JSON.parse(text);
+      } catch {
+        model = { raw: text.slice(0, 200) };
+      }
+      res.status(upstream.ok ? 200 : 502).json({
+        ok: upstream.ok,
+        status: upstream.status,
+        model,
+      });
+    } catch (error) {
+      res.status(502).json({
+        ok: false,
+        error: error instanceof Error ? error.message : "The model service is unreachable.",
+      });
+    }
+  },
+);
+
 app.post(
   "/api/predictResearchBctb",
   async (req: Request, res: Response): Promise<void> => {
@@ -413,7 +444,9 @@ app.post(
           });
 
           result = {
-            error: "Prediction service returned an invalid response.",
+            error: `Prediction service returned a non-JSON response (HTTP ${upstream.status}).`,
+            upstreamStatus: upstream.status,
+            preview: responseText.slice(0, 300),
           };
         }
 

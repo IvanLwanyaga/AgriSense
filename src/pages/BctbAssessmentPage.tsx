@@ -466,6 +466,7 @@ export default function BctbAssessmentPage({
   const [calculating, setCalculating] = useState(false);
   const [modelError, setModelError] = useState("");
   const [offlineQueued, setOfflineQueued] = useState("");
+  const [modelHealth, setModelHealth] = useState<"checking" | "online" | "offline">("checking");
   const [currentStep, setCurrentStep] = useState(1);
   const [showErrors, setShowErrors] = useState(false);
   const [activeTab, setActiveTab] = useState<"NEW_ASSESSMENT" | "HISTORY">("NEW_ASSESSMENT");
@@ -507,6 +508,21 @@ export default function BctbAssessmentPage({
   const lastFocusedStep = useRef(1);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const resultRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/modelHealth")
+      .then((response) => response.json() as Promise<{ ok?: boolean }>)
+      .then((data) => {
+        if (active) setModelHealth(data.ok ? "online" : "offline");
+      })
+      .catch(() => {
+        if (active) setModelHealth("offline");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const missing = missingFields(assessment);
   const missingKeys = new Set(missing.map((m) => m.key));
@@ -778,6 +794,13 @@ export default function BctbAssessmentPage({
           <span className="section-kicker">Coffee field screening</span>
           <h2>{t.screeningTitle}</h2>
           <p>{t.screeningSubtitle} Record one sampled block at a time; use the same block and method when you repeat an inspection.</p>
+          <span className={`model-status model-status--${modelHealth}`}>
+            {modelHealth === "checking"
+              ? "Checking trained model…"
+              : modelHealth === "online"
+                ? "Trained model online"
+                : "Trained model offline — device fallback"}
+          </span>
         </div>
         <div className="mode-toggle" role="group" aria-label="Form style">
           <button
