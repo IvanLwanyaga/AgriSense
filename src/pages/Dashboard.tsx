@@ -44,7 +44,7 @@ import SmsBroadcastModal from "../components/SmsBroadcastModal";
 /* ------------------------------------------------------------------ */
 
 const ICONS = {
-  overview: "M4 4h7v7H4z M14 4h6v4h-6z M14 11h6v9h-6z M4 14h7v6H4z M6.5 7.5h2 M16 6h2 M16 15h2 M6.5 17h2",
+  overview: "M4 4h7v7H4z M13 4h7v5h-7z M13 11h7v9h-7z M4 13h7v7H4z",
   farms: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   check: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M21 21l-4.6-4.6 M8.5 11h5 M11 8.5v5",
   map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z M9 4v14 M15 6v14",
