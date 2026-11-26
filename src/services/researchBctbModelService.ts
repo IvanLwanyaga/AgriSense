@@ -8,6 +8,19 @@ import type {
 type ShapContribution = ResearchBctbPrediction["shap_contributions"][number];
 const RISK_LEVELS: BctbRiskLevel[] = ["LOW", "MODERATE", "HIGH"];
 const RESEARCH_MODEL_FEATURE_COUNT = 34;
+const MODEL_STARTUP_RETRIES = 8;
+const MODEL_STARTUP_RETRY_DELAY_MS = 10_000;
+
+class ModelRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ModelRequestError";
+  }
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
 
 function isRiskLevel(value: unknown): value is BctbRiskLevel {
   return value === "LOW" || value === "MODERATE" || value === "HIGH";
@@ -37,7 +50,7 @@ function isShapContribution(value: unknown): value is ShapContribution {
     && ["SUPPORTS_PREDICTION", "OPPOSES_PREDICTION", "NEUTRAL"].includes(String(contribution.direction));
 }
 
-export async function predictResearchBctbRisk(
+async function requestResearchBctbRisk(
   modelInputs: ResearchBctbModelInputs,
   options: { includeCounterfactual?: boolean } = {},
 ): Promise<ResearchBctbPrediction> {
@@ -53,16 +66,11 @@ export async function predictResearchBctbRisk(
     payload = {};
   }
   if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(
-        "The Firebase prediction function was not found (404). Stop and restart the local app with `npm run dev` from the project root so Functions rebuilds and loads predictResearchBctb."
-      );
-    }
     const error = typeof payload === "object" && payload !== null
       && "error" in payload && typeof payload.error === "string"
       ? payload.error
       : responseText.trim().slice(0, 300) || `Research model request failed (HTTP ${response.status}).`;
-    throw new Error(error);
+    throw new ModelRequestError(error, response.status);
   }
 
   if (typeof payload !== "object" || payload === null) {
@@ -117,4 +125,26 @@ export async function predictResearchBctbRisk(
     input_total: prediction.input_total,
     disclaimer: prediction.disclaimer,
   };
+}
+
+export async function predictResearchBctbRisk(
+  modelInputs: ResearchBctbModelInputs,
+  options: { includeCounterfactual?: boolean } = {},
+): Promise<ResearchBctbPrediction> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await requestResearchBctbRisk(modelInputs, options);
+    } catch (error) {
+      const transientHttpFailure = error instanceof ModelRequestError
+        && [502, 503, 504].includes(error.status);
+      const transientNetworkFailure = error instanceof TypeError;
+      if ((!transientHttpFailure && !transientNetworkFailure) || attempt >= MODEL_STARTUP_RETRIES) {
+        if (attempt > 0 && error instanceof Error && transientHttpFailure) {
+          throw new Error(`The free model service did not wake up after ${attempt} retries. ${error.message}`);
+        }
+        throw error;
+      }
+      await wait(MODEL_STARTUP_RETRY_DELAY_MS);
+    }
+  }
 }

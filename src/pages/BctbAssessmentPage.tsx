@@ -471,19 +471,29 @@ export default function BctbAssessmentPage({
 
   useEffect(() => {
     let active = true;
-    fetch("/api/modelHealth")
-      .then(async (response) => ({
-        httpOk: response.ok,
-        data: await response.json() as { ok?: boolean; status?: number },
-      }))
-      .then(({ httpOk, data }) => {
-        if (!active) return;
-        setModelHealth(httpOk && data.ok === true ? "online" : "offline");
-        setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
-      })
-      .catch(() => {
-        if (active) setModelHealth("offline");
-      });
+    const wakeDeadline = Date.now() + 90_000;
+    async function wakeFreeModel() {
+      while (active) {
+        try {
+          const response = await fetch("/api/modelHealth", { cache: "no-store" });
+          const data = await response.json() as { ok?: boolean; status?: number };
+          if (!active) return;
+          setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
+          if (response.ok && data.ok === true) {
+            setModelHealth("online");
+            return;
+          }
+        } catch {
+          if (!active) return;
+        }
+        if (Date.now() >= wakeDeadline) {
+          setModelHealth("offline");
+          return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 8_000));
+      }
+    }
+    void wakeFreeModel();
     return () => {
       active = false;
     };
@@ -748,12 +758,12 @@ export default function BctbAssessmentPage({
           <p>{t.screeningSubtitle} Record one sampled block at a time; use the same block and method when you repeat an inspection.</p>
           <span className={`model-status model-status--${modelHealth}`}>
             {modelHealth === "checking"
-              ? "Checking trained model…"
+              ? "Waking trained model (free service)…"
               : modelHealth === "online"
                 ? "Trained model online"
                 : modelHealthDetail === "429"
                   ? "Trained model rate-limited (429)"
-                  : "Trained model offline — predictions unavailable"}
+                  : "Trained model sleeping or unavailable — predictions will retry"}
           </span>
         </div>
         <div className="mode-toggle" role="group" aria-label="Form style">
@@ -1269,7 +1279,7 @@ export default function BctbAssessmentPage({
                   </button>
                   <span>Result and entered factors are saved in your device-local visit journal; no officer is notified.</span>
                   <button className="primary-button screening-submit" type="submit" disabled={calculating}>
-                    {calculating ? "Checking…" : "Check my risk"}
+                    {calculating ? "Waiting for trained model…" : "Check my risk"}
                   </button>
                 </div>
               </section>
