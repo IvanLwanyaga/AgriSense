@@ -451,6 +451,8 @@ app.post(
         }
 
         // 8. Forward the model response
+        const retryAfter = upstream.headers.get("retry-after");
+        if (retryAfter) res.setHeader("Retry-After", retryAfter);
         res.status(upstream.status).json(result);
 
       } finally {

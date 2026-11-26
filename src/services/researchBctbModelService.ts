@@ -12,7 +12,7 @@ const MODEL_STARTUP_RETRIES = 8;
 const MODEL_STARTUP_RETRY_DELAY_MS = 10_000;
 
 class ModelRequestError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly retryAfterMs = 0) {
     super(message);
     this.name = "ModelRequestError";
   }
@@ -20,6 +20,15 @@ class ModelRequestError extends Error {
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function getRetryAfterMs(value: string | null): number {
+  if (!value) return 30_000;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds)
+    ? seconds * 1_000
+    : Date.parse(value) - Date.now();
+  return Math.min(120_000, Math.max(5_000, Number.isFinite(delay) ? delay : 30_000));
 }
 
 function isRiskLevel(value: unknown): value is BctbRiskLevel {
@@ -70,7 +79,11 @@ async function requestResearchBctbRisk(
       && "error" in payload && typeof payload.error === "string"
       ? payload.error
       : responseText.trim().slice(0, 300) || `Research model request failed (HTTP ${response.status}).`;
-    throw new ModelRequestError(error, response.status);
+    throw new ModelRequestError(
+      error,
+      response.status,
+      response.status === 429 ? getRetryAfterMs(response.headers.get("retry-after")) : 0,
+    );
   }
 
   if (typeof payload !== "object" || payload === null) {
@@ -137,14 +150,18 @@ export async function predictResearchBctbRisk(
     } catch (error) {
       const transientHttpFailure = error instanceof ModelRequestError
         && [502, 503, 504].includes(error.status);
+      const rateLimited = error instanceof ModelRequestError && error.status === 429;
       const transientNetworkFailure = error instanceof TypeError;
-      if ((!transientHttpFailure && !transientNetworkFailure) || attempt >= MODEL_STARTUP_RETRIES) {
+      const retryLimit = rateLimited ? 1 : MODEL_STARTUP_RETRIES;
+      if ((!transientHttpFailure && !rateLimited && !transientNetworkFailure) || attempt >= retryLimit) {
         if (attempt > 0 && error instanceof Error && transientHttpFailure) {
           throw new Error(`The free model service did not wake up after ${attempt} retries. ${error.message}`);
         }
         throw error;
       }
-      await wait(MODEL_STARTUP_RETRY_DELAY_MS);
+      await wait(rateLimited && error instanceof ModelRequestError
+        ? error.retryAfterMs
+        : MODEL_STARTUP_RETRY_DELAY_MS);
     }
   }
 }

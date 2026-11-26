@@ -471,29 +471,19 @@ export default function BctbAssessmentPage({
 
   useEffect(() => {
     let active = true;
-    const wakeDeadline = Date.now() + 90_000;
-    async function wakeFreeModel() {
-      while (active) {
-        try {
-          const response = await fetch("/api/modelHealth", { cache: "no-store" });
-          const data = await response.json() as { ok?: boolean; status?: number };
-          if (!active) return;
-          setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
-          if (response.ok && data.ok === true) {
-            setModelHealth("online");
-            return;
-          }
-        } catch {
-          if (!active) return;
-        }
-        if (Date.now() >= wakeDeadline) {
-          setModelHealth("offline");
-          return;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 8_000));
-      }
-    }
-    void wakeFreeModel();
+    fetch("/api/modelHealth", { cache: "no-store" })
+      .then(async (response) => ({
+        httpOk: response.ok,
+        data: await response.json() as { ok?: boolean; status?: number },
+      }))
+      .then(({ httpOk, data }) => {
+        if (!active) return;
+        setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
+        setModelHealth(httpOk && data.ok === true ? "online" : "offline");
+      })
+      .catch(() => {
+        if (active) setModelHealth("offline");
+      });
     return () => {
       active = false;
     };
@@ -758,12 +748,12 @@ export default function BctbAssessmentPage({
           <p>{t.screeningSubtitle} Record one sampled block at a time; use the same block and method when you repeat an inspection.</p>
           <span className={`model-status model-status--${modelHealth}`}>
             {modelHealth === "checking"
-              ? "Waking trained model (free service)…"
+              ? "Checking trained model…"
               : modelHealth === "online"
                 ? "Trained model online"
                 : modelHealthDetail === "429"
                   ? "Trained model rate-limited (429)"
-                  : "Trained model sleeping or unavailable — predictions will retry"}
+                  : "Free model may be sleeping or busy — prediction will retry"}
           </span>
         </div>
         <div className="mode-toggle" role="group" aria-label="Form style">
