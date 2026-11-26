@@ -578,7 +578,7 @@ function RoleHome({
             <div className="farmer-hero-actions">
               <button className="primary-button btn-lg" type="button" onClick={() => onNavigate("bctb-assessment")}>
                 {t.startScreeningBtn}
-                <span aria-hidden="true">â†’</span>
+                <span aria-hidden="true">→</span>
               </button>
               <button className="outline-button btn-lg" type="button" onClick={() => onNavigate("help-room")}>
                 {t.askAnOfficer}
@@ -590,7 +590,7 @@ function RoleHome({
                   <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z" />
                   <circle cx="12" cy="10" r="2.5" />
                 </svg>
-                {district} {t.districtWord}{subCounty ? ` Â· ${subCounty} ${t.subCountyWord}` : ""}
+                {district} {t.districtWord}{subCounty ? ` · ${subCounty} ${t.subCountyWord}` : ""}
               </span>
               <span>
                 {farms.length} {farms.length === 1 ? t.farmRegisteredCount : t.farmsRegisteredCount}
@@ -601,11 +601,11 @@ function RoleHome({
           <aside className="today-card" aria-label={t.todayOnYourFarm}>
             <div className="today-card-head">
               <span className="section-kicker">{t.todayOnYourFarm}</span>
-              <span className="today-weather-icon" aria-hidden="true">â˜€</span>
+              <span className="today-weather-icon" aria-hidden="true">☀</span>
             </div>
             {weather && weather.granularity !== "UNAVAILABLE" ? (
               <>
-                <strong className="today-temp">{Math.round(weather.tempAvg30dC)}Â°C</strong>
+                <strong className="today-temp">{Math.round(weather.tempAvg30dC)}°C</strong>
                 <p className="today-temp-label">{t.avgTemp30dLabel}</p>
                 <dl className="today-stats">
                   <div>
@@ -626,24 +626,24 @@ function RoleHome({
               <p className="today-loading">
                 {language === "lg" ? "Yongerako ennimiro yo esooka okulaba embeera y'obudde. " : language === "sw" ? "Ongeza shamba lako la kwanza kuona hali ya hewa. " : language === "nyn" ? "Taaho omusiri gwawe ogw'okubanza kureeba obwire. " : "Add your first farm to see local weather. "}
                 <button className="text-button" type="button" onClick={() => onNavigate("farms")}>
-                  {t.myFarms} <span aria-hidden="true">â†’</span>
+                  {t.myFarms} <span aria-hidden="true">→</span>
                 </button>
               </p>
             ) : (
-              <p className="today-loading">{language === "lg" ? "Tutikka embeera y'obudde..." : language === "sw" ? "Inapakia hali ya hewa..." : language === "nyn" ? "Nikitwara obwire..." : "Loading your local weatherâ€¦"}</p>
+              <p className="today-loading">{language === "lg" ? "Tutikka embeera y'obudde..." : language === "sw" ? "Inapakia hali ya hewa..." : language === "nyn" ? "Nikitwara obwire..." : "Loading your local weather…"}</p>
             )}
             <button className="text-button today-link" type="button" onClick={() => onNavigate("weather")}>
-              {t.farmWeather} <span aria-hidden="true">â†’</span>
+              {t.farmWeather} <span aria-hidden="true">→</span>
             </button>
           </aside>
         </section>
 
         <section className="kpi-grid" aria-label="Farm conditions">
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--blue" aria-hidden="true">ðŸ’§</span>
+            <span className="kpi-icon kpi-icon--blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c-2 3.1-6 7.4-6 11a6 6 0 0 0 12 0c0-3.6-4-7.9-6-11Z"/><path d="M9 15a3 3 0 0 0 3 3"/></svg></span>
             <div className="kpi-copy">
               <span>{t.soilMoistureLabel}</span>
-              <strong>{telemetry ? `${Math.round(telemetry.soilMoisture)}%` : "â€”"}</strong>
+              <strong>{telemetry ? `${Math.round(telemetry.soilMoisture)}%` : "—"}</strong>
               <small className={`kpi-state ${moistureState === "Adequate" ? "is-good" : "is-warn"}`}>
                 {moistureState === "Adequate" ? t.stateAdequate : moistureState === "Dry" ? t.stateDry : moistureState === "Wet" ? t.stateWet : t.stateNoData}
               </small>
@@ -651,10 +651,10 @@ function RoleHome({
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--amber" aria-hidden="true">ðŸŒ¡</span>
+            <span className="kpi-icon kpi-icon--amber" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4.5 4.5 0 1 0 4 0Z"/><path d="M12 17V8"/></svg></span>
             <div className="kpi-copy">
               <span>{t.temperatureLabel}</span>
-              <strong>{telemetry ? `${telemetry.ambientTemperature.toFixed(1)}Â°C` : "â€”"}</strong>
+              <strong>{telemetry ? `${telemetry.ambientTemperature.toFixed(1)}°C` : "—"}</strong>
               <small className={`kpi-state ${tempState === "Comfortable" ? "is-good" : "is-warn"}`}>
                 {tempState === "Comfortable" ? t.stateComfortable : tempState === "Check" ? t.stateCheck : t.stateNoData}
               </small>
@@ -662,10 +662,10 @@ function RoleHome({
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--green" aria-hidden="true">ðŸ’¨</span>
+            <span className="kpi-icon kpi-icon--green" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M3 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M3 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></svg></span>
             <div className="kpi-copy">
               <span>{t.humidityLabel}</span>
-              <strong>{telemetry ? `${Math.round(telemetry.relativeHumidity)}%` : "â€”"}</strong>
+              <strong>{telemetry ? `${Math.round(telemetry.relativeHumidity)}%` : "—"}</strong>
               <small className={`kpi-state ${humidityState === "Healthy" ? "is-good" : "is-warn"}`}>
                 {humidityState === "Healthy" ? t.stateHealthy : humidityState === "Check" ? t.stateCheck : t.stateNoData}
               </small>
@@ -673,10 +673,10 @@ function RoleHome({
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--clay" aria-hidden="true">ðŸŒ§</span>
+            <span className="kpi-icon kpi-icon--clay" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 16a4 4 0 1 1 .8-7.9A5.5 5.5 0 0 1 18 10a3 3 0 1 1 0 6H7Z"/><path d="m9 18-1 2m6-2-1 2m6-2-1 2"/></svg></span>
             <div className="kpi-copy">
               <span>{t.rain30dKpi}</span>
-              <strong>{weather ? `${Math.round(weather.cumulativeRainfall30dMm)} mm` : "â€”"}</strong>
+              <strong>{weather ? `${Math.round(weather.cumulativeRainfall30dMm)} mm` : "—"}</strong>
               <small className="kpi-state">{weather ? t.regionalWeatherLabel : t.stateNoData}</small>
             </div>
           </article>
@@ -685,39 +685,39 @@ function RoleHome({
 
         <section className="quick-grid" aria-label={t.quickActions}>
           <button className="quick-card" type="button" onClick={() => onNavigate("bctb-assessment")}>
-            <span className="quick-icon quick-icon--green" aria-hidden="true">â—Ž</span>
+            <span className="quick-icon quick-icon--green" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5"/></svg></span>
             <span className="quick-copy">
               <strong>{t.quickCheckCoffeeTitle}</strong>
               <small>{t.quickCheckCoffeeDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">â†’</span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("help-room")}>
-            <span className="quick-icon quick-icon--amber" aria-hidden="true">ðŸ’¬</span>
+            <span className="quick-icon quick-icon--amber" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H9l-5 4V5Z"/><path d="M8 9h8m-8 4h5"/></svg></span>
             <span className="quick-copy">
               <strong>{t.quickAskOfficerTitle}</strong>
               <small>{t.quickAskOfficerDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">â†’</span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("farms")}>
-            <span className="quick-icon quick-icon--clay" aria-hidden="true">ðŸŒ±</span>
+            <span className="quick-icon quick-icon--clay" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 4C10 4 5 8 5 15c0 3 2 5 5 5 7 0 11-6 10-16Z"/><path d="M4 21c3-5 7-8 12-11"/></svg></span>
             <span className="quick-copy">
               <strong>{t.myFarms}</strong>
               <small>{farms.length} {t.quickMyFarmsDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">â†’</span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("weather")}>
-            <span className="quick-icon quick-icon--blue" aria-hidden="true">â˜€</span>
+            <span className="quick-icon quick-icon--blue" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg></span>
             <span className="quick-copy">
               <strong>{t.farmWeather}</strong>
               <small>{t.quickFarmWeatherDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">â†’</span>
+            <span className="quick-arrow" aria-hidden="true">→</span>
           </button>
         </section>
 
@@ -758,7 +758,7 @@ function RoleHome({
                   <strong className={`risk-text-${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>
                     {savedEntry.prediction?.predicted_risk === "HIGH" ? t.riskHighHeading : savedEntry.prediction?.predicted_risk === "MODERATE" ? t.riskModerateHeading : t.riskLowHeading}
                   </strong>
-                  <span>{t.savedResultText} {savedDate} Â· {savedScore}/100</span>
+                  <span>{t.savedResultText} {savedDate} · {savedScore}/100</span>
                 </div>
                 <p>{t.screeningWarningText}</p>
                 {savedEntry.prediction && savedEntry.prediction.predicted_risk !== "LOW" && (
@@ -769,7 +769,7 @@ function RoleHome({
               </>
             ) : (
               <div className="farmer-empty">
-                <span className="farmer-empty-icon" aria-hidden="true">â—Ž</span>
+                <span className="farmer-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5"/></svg></span>
                 <strong>{t.noScreeningTitle}</strong>
                 <p>{t.noScreeningDesc}</p>
               </div>
@@ -784,7 +784,7 @@ function RoleHome({
                 onClick={() => onNavigate("bctb-assessment")}
               >
                 {sessionPrediction || savedEntry ? t.updateAssessmentBtn : t.startScreeningBtn}
-                <span aria-hidden="true">â†’</span>
+                <span aria-hidden="true">→</span>
               </button>
             </div>
 
@@ -796,28 +796,28 @@ function RoleHome({
             <h3>{t.naroChecklistTitle}</h3>
             <ul className="checklist">
               <li>
-                <span className="check" aria-hidden="true">âœ“</span>
+                <span className="check" aria-hidden="true">✓</span>
                 <div>
                   <strong>{t.pruneTitle}</strong>
                   <p>{t.pruneDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">âœ“</span>
+                <span className="check" aria-hidden="true">✓</span>
                 <div>
                   <strong>{t.burnTitle}</strong>
                   <p>{t.burnDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">âœ“</span>
+                <span className="check" aria-hidden="true">✓</span>
                 <div>
                   <strong>{t.desuckerTitle}</strong>
                   <p>{t.desuckerDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">âœ“</span>
+                <span className="check" aria-hidden="true">✓</span>
                 <div>
                   <strong>{t.shadeTitle}</strong>
                   <p>{t.shadeDesc}</p>

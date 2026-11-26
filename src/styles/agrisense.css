@@ -952,6 +952,16 @@ textarea {
   font-weight: 700;
 }
 
+.quick-icon svg, .kpi-icon svg, .farmer-empty-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .quick-icon--green {
   color: #256b42;
   background: #e9f5ec;
@@ -1072,6 +1082,8 @@ textarea {
   font-size: 20px;
   font-weight: 700;
 }
+
+.farmer-empty-icon svg { width: 24px; height: 24px; }
 
 .farmer-empty strong {
   color: var(--ag-ink);
