@@ -2409,3 +2409,7 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+/* Keep long translations aligned without colliding with navigation icons. */
+.nav-item { min-width: 0; }
+.nav-item-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.25; }
+@media (max-width: 760px) { .nav-item-label { white-space: nowrap; } }

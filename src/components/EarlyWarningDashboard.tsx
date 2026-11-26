@@ -56,49 +56,49 @@ const ROLE_PAGES: Record<string, AppPage[]> = {
 function getNavLabel(item: AppPage, t: TranslationDictionary): { label: string; icon: string } {
   switch (item) {
     case "bctb-assessment":
-      return { label: t.bctbScreening, icon: "â—Ž" };
+      return { label: t.bctbScreening, icon: "\u25c9" };
     case "help-room":
-      return { label: t.helpRoom, icon: "ðŸ’¬" };
+      return { label: t.helpRoom, icon: "\u003f" };
     case "farms":
-      return { label: t.myFarms, icon: "ðŸŒ±" };
+      return { label: t.myFarms, icon: "\u2698" };
     case "weather":
-      return { label: t.farmWeather, icon: "ðŸŒ¦" };
+      return { label: t.farmWeather, icon: "\u2601" };
     case "recommendations":
-      return { label: t.recommendations, icon: "ðŸ“‹" };
+      return { label: t.recommendations, icon: "\u25a4" };
     case "activities":
-      return { label: t.activities, icon: "ðŸ“”" };
+      return { label: t.activities, icon: "\u25a5" };
     case "alerts":
-      return { label: t.alerts, icon: "âš ï¸" };
+      return { label: t.alerts, icon: "\u0021" };
     case "ai-assistant":
-      return { label: t.aiAssistant, icon: "âœ¨" };
+      return { label: t.aiAssistant, icon: "\u2728" };
     case "settings":
-      return { label: t.settings, icon: "âš™ï¸" };
+      return { label: t.settings, icon: "\u2699" };
     case "extension":
-      return { label: t.extensionTriage, icon: "ðŸ“‹" };
+      return { label: t.extensionTriage, icon: "\u2692" };
     case "farm-reports":
-      return { label: t.navFarmReports, icon: "ðŸ“‹" };
+      return { label: t.navFarmReports, icon: "\u25a4" };
     case "verification":
-      return { label: t.navVerification, icon: "ðŸ”" };
+      return { label: t.navVerification, icon: "\u2713" };
     case "inspections":
-      return { label: t.navInspections, icon: "âœ…" };
+      return { label: t.navInspections, icon: "\u2714" };
     case "map":
-      return { label: t.map, icon: "ðŸ—º" };
+      return { label: t.map, icon: "\u25a7" };
     case "governance":
-      return { label: t.governanceRules, icon: "âš–ï¸" };
+      return { label: t.governanceRules, icon: "\u2696" };
     case "staff-applications":
-      return { label: t.navOfficerApplications, icon: "âœ“" };
+      return { label: t.navOfficerApplications, icon: "\u2713" };
     case "admin-accounts":
-      return { label: t.navAccountManagement, icon: "ðŸ”" };
+      return { label: t.navAccountManagement, icon: "\u25a3" };
     case "coffee-passport":
-      return { label: t.navCoffeePassport, icon: "ðŸ§¾" };
+      return { label: t.navCoffeePassport, icon: "\u25c8" };
     case "cooperative-surveillance":
-      return { label: t.navCooperative, icon: "ðŸ“Š" };
+      return { label: t.navCooperative, icon: "\u25a6" };
     case "subscription":
-      return { label: t.navPlans, icon: "ðŸ’Ž" };
+      return { label: t.navPlans, icon: "\u0024" };
     case "organization-management":
-      return { label: t.navOrgPortal, icon: "ðŸ¢" };
+      return { label: t.navOrgPortal, icon: "\u2302" };
     default:
-      return { label: item, icon: "â€¢" };
+      return { label: item, icon: "\u2022" };
   }
 }
 
@@ -1144,7 +1144,7 @@ function Shell({
         <p className="workspace-label">{currentRole === "FARMER" ? t.roleFarmerText : currentRole === "AGRICULTURAL_OFFICER" ? t.roleOfficerText : currentRole} {t.workspaceLabel}</p>
 
         <nav className="nav-list" aria-label="AgriSense navigation">
-          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="âŒ‚">
+          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="\u25a0">
             {t.overview}
           </NavButton>
 
@@ -1260,7 +1260,7 @@ function NavButton({
       aria-current={active ? "page" : undefined}
     >
       <span aria-hidden="true">{icon}</span>
-      {children}
+      <span className="nav-item-label">{children}</span>
     </button>
   );
 }
