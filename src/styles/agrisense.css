@@ -211,6 +211,22 @@ textarea {
   stroke-linejoin: round;
 }
 
+.page-title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-overview-icon {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  color: #36734a;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
 .nav-item:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.07);

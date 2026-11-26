@@ -1144,7 +1144,7 @@ function Shell({
         <p className="workspace-label">{currentRole === "FARMER" ? t.roleFarmerText : currentRole === "AGRICULTURAL_OFFICER" ? t.roleOfficerText : currentRole} {t.workspaceLabel}</p>
 
         <nav className="nav-list" aria-label="AgriSense navigation">
-          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon={<svg className="nav-overview-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>}>
+          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon={<OverviewIcon className="nav-overview-icon" />}>
             {t.overview}
           </NavButton>
 
@@ -1189,7 +1189,10 @@ function Shell({
         <header className="topbar">
           <div>
             <p className="eyebrow">{t.eyebrowText}</p>
-            <h1>{title}</h1>
+            <h1 className={page === "dashboard" ? "page-title-with-icon" : undefined}>
+              {page === "dashboard" && <OverviewIcon className="page-overview-icon" />}
+              {title}
+            </h1>
           </div>
 
           <div className="topbar-right">
@@ -1238,6 +1241,17 @@ function Shell({
         {children}
       </main>
     </div>
+  );
+}
+
+function OverviewIcon({ className }: { className: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
+      <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+    </svg>
   );
 }
 
