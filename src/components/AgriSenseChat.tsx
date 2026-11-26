@@ -1,87 +1,75 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { askAgriSenseAI, type AgriSenseAiContext } from "../services/aiService";
 import ListenButton from "./ListenButton";
-import { askManualRag } from "../services/mlToolsService";
-import LugandaVoiceInput from "./LugandaVoiceInput";
-import TwigImageDetector from "./TwigImageDetector";
 
 interface ChatMessage { sender: "farmer" | "ai"; text: string; }
+
+const suggestions = [
+  "How can I check my coffee trees for borer damage?",
+  "What should I do after a high-risk screening?",
+  "How can I protect young coffee branches?",
+];
 
 export default function AgriSenseChat({ context }: { context: AgriSenseAiContext }) {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { sender: "ai", text: "Hello. Ask me about your screening result, coffee inspection, or farm monitoring." },
+    { sender: "ai", text: "Hello! I’m your AgriSense farm assistant. Ask me about coffee health, BCTB screening, or your farm monitoring." },
   ]);
-  const [manualQuestion, setManualQuestion] = useState("");
-  const [manualAnswer, setManualAnswer] = useState("");
-  const [manualSources, setManualSources] = useState<string[]>([]);
-  const [manualLoading, setManualLoading] = useState(false);
-  const [manualError, setManualError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  async function askManual(event: React.FormEvent) {
-    event.preventDefault();
-    if (!manualQuestion.trim() || manualLoading) return;
-    setManualLoading(true); setManualError(""); setManualAnswer(""); setManualSources([]);
-    try {
-      const result = await askManualRag(manualQuestion.trim());
-      setManualAnswer(result.answer);
-      setManualSources(result.sources || []);
-    } catch (error) {
-      setManualError(error instanceof Error ? error.message : "Manual search is unavailable.");
-    } finally { setManualLoading(false); }
-  }
-
-  async function sendQuestion(event?: React.FormEvent) {
-    event?.preventDefault();
-    const trimmed = question.trim();
+  async function sendQuestion(text = question) {
+    const trimmed = text.trim();
     if (!trimmed || loading) return;
     setQuestion("");
     setMessages((current) => [...current, { sender: "farmer", text: trimmed }]);
     setLoading(true);
     try {
-      const recentConversation = messages
-        .map((message) => ({
-          role: message.sender === "farmer" ? "farmer" as const : "assistant" as const,
-          text: message.text,
-        }));
+      const recentConversation = messages.map((message) => ({
+        role: message.sender === "farmer" ? "farmer" as const : "assistant" as const,
+        text: message.text,
+      }));
       const answer = await askAgriSenseAI(trimmed, { ...context, recentConversation });
       setMessages((current) => [...current, { sender: "ai", text: answer }]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "AgriSense AI is temporarily unavailable.";
-      setMessages((current) => [...current, { sender: "ai", text: message }]);
+    } catch {
+      setMessages((current) => [...current, { sender: "ai", text: "I’m having trouble connecting right now. Please try again in a moment." }]);
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   }
 
   return (
-    <section className="panel agrisense-chat">
-      <div className="panel-header"><div><span className="section-kicker">Conversational support</span><h3>Ask AgriSense AI</h3></div><span className="ai-live-badge">LIVE BACKEND</span></div>
-      <p className="chat-disclaimer">AI explains stored screening evidence and provides educational guidance. It does not diagnose BCTB or replace an extension officer.</p>
-      <div className="chat-messages" aria-live="polite">
+    <section className="agrisense-chat" aria-label="AgriSense AI assistant">
+      <header className="assistant-header">
+        <div className="assistant-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><path d="M16 4c-6.6 0-11 4.2-11 10.1 0 3.8 2.2 6.9 5.7 8.4L9.5 28l6.5-3.4c6.5 0 11.5-4.3 11.5-10.3S22.6 4 16 4Z" stroke="currentColor" strokeWidth="1.8"/><path d="M11 16c2.2-4 6-5.5 10-5-1 4.8-4.2 7.6-9.3 7.8M11.5 19c1.8-2.6 4-4.5 7-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+        </div>
+        <div className="assistant-heading"><span className="section-kicker">YOUR FARM ASSISTANT</span><h2>AgriSense AI</h2><p>Practical guidance for healthier coffee farms</p></div>
+        <span className="assistant-status"><i /> Ready to help</span>
+      </header>
+
+      <div className="assistant-conversation" aria-live="polite" aria-label="Conversation">
         {messages.map((message, index) => (
-          <div className={`chat-message ${message.sender}`} key={`${message.sender}-${index}`}>
-            <strong>{message.sender === "ai" ? "AgriSense AI" : "You"}</strong>
-            <p>{message.text}</p>
-            {message.sender === "ai" && <ListenButton text={message.text} />}
-          </div>
+          <article className={`assistant-message ${message.sender}`} key={`${message.sender}-${index}`}>
+            {message.sender === "ai" && <span className="assistant-message-avatar" aria-hidden="true">A</span>}
+            <div className="assistant-message-body">
+              <span className="assistant-message-name">{message.sender === "ai" ? "AgriSense" : "You"}</span>
+              <div className="assistant-message-bubble"><p>{message.text}</p></div>
+              {message.sender === "ai" && <ListenButton text={message.text} />}
+            </div>
+          </article>
         ))}
-        {loading && <div className="chat-message ai"><strong>AgriSense AI</strong><p>Thinking...</p></div>}
+        {loading && <article className="assistant-message ai"><span className="assistant-message-avatar">A</span><div className="assistant-message-body"><span className="assistant-message-name">AgriSense</span><div className="assistant-message-bubble assistant-typing"><i /><i /><i /><span>Thinking</span></div></div></article>}
       </div>
-      <form className="chat-input-row" onSubmit={sendQuestion}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your screening..." aria-label="Ask AgriSense AI" /><button className="primary-button" type="submit" disabled={loading || !question.trim()}>Send</button></form>
-      <section className="panel ml-tool-panel">
-        <h3>Search coffee pest manuals</h3>
-        <p>Answers use the locally indexed manuals and return “I don't know” when they do not contain the answer.</p>
-        <form className="chat-input-row" onSubmit={askManual}>
-          <input value={manualQuestion} onChange={(event) => setManualQuestion(event.target.value)} aria-label="Question for coffee manuals" placeholder="Ask a question from the manuals…" />
-          <button className="primary-button" type="submit" disabled={manualLoading || !manualQuestion.trim()}>{manualLoading ? "Searching…" : "Search"}</button>
-        </form>
-        {manualError && <p role="alert">{manualError}</p>}
-        {manualAnswer && <div aria-live="polite"><p>{manualAnswer}</p>{manualSources.length > 0 && <small>Sources: {manualSources.join(", ")}</small>}</div>}
-      </section>
-      <LugandaVoiceInput />
-      <TwigImageDetector />
+
+      {messages.length === 1 && <div className="assistant-suggestions"><span>Try asking</span>{suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void sendQuestion(suggestion)}>{suggestion}<span aria-hidden="true">↗</span></button>)}</div>}
+
+      <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void sendQuestion(); }}>
+        <input ref={inputRef} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your coffee farm…" aria-label="Message AgriSense AI" />
+        <button type="submit" disabled={loading || !question.trim()} aria-label="Send message"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12 20 4l-5 16-3-7-8-1Z M12 13l8-9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg><span>Send</span></button>
+      </form>
+      <p className="assistant-footnote">AI guidance can help inform decisions, but does not replace an extension officer or a field diagnosis.</p>
     </section>
   );
 }
