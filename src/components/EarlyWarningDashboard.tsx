@@ -1144,7 +1144,7 @@ function Shell({
         <p className="workspace-label">{currentRole === "FARMER" ? t.roleFarmerText : currentRole === "AGRICULTURAL_OFFICER" ? t.roleOfficerText : currentRole} {t.workspaceLabel}</p>
 
         <nav className="nav-list" aria-label="AgriSense navigation">
-          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="\u25a0">
+          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon={<svg className="nav-overview-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>}>
             {t.overview}
           </NavButton>
 
@@ -1249,7 +1249,7 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: string;
+  icon: ReactNode;
   children: ReactNode;
 }) {
   return (
