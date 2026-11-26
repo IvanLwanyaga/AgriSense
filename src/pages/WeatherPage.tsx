@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { fetchFarmWeather } from "../services/weatherService";
 import { UGANDA_DISTRICTS } from "../services/agronomyData";
 import type { FarmWeatherSummary } from "../types/weather";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function WeatherPage() {
+  const { t } = useLanguage();
   const [selectedDistrict, setSelectedDistrict] = useState(UGANDA_DISTRICTS[0]);
   const [weather, setWeather] = useState<FarmWeatherSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,16 +34,16 @@ export default function WeatherPage() {
     <section className="workspace-page weather-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">Agrometeorological Intelligence</p>
-          <h2>Weather Intelligence</h2>
+          <p className="eyebrow">{t.recEyebrow}</p>
+          <h2>{t.farmWeather}</h2>
           <p>
-            Local weather observations, evapotranspiration indices, and agricultural advisories for Uganda.
+            {t.weatherIntel}
           </p>
         </div>
 
         {/* District Selector */}
         <div className="district-picker">
-          <label>District Focus:</label>
+          <label>{t.districtWord}:</label>
           <select
             value={selectedDistrict.name}
             onChange={(e) => {
@@ -60,14 +62,14 @@ export default function WeatherPage() {
 
       {loading || !weather ? (
         <div className="empty-workspace">
-          <h3>Fetching the latest forecast...</h3>
+          <h3>{t.latestForecastLoading}</h3>
         </div>
       ) : (
         <>
           <p className="settings-info-card" role="status">
             {weather.isFallback
-              ? `Showing cached or estimated weather because the live provider could not be reached. Last available update: ${new Date(weather.lastUpdated).toLocaleString()}.`
-              : `Live forecast from Open-Meteo, updated ${new Date(weather.lastUpdated).toLocaleString()}.`}
+              ? `${t.liveWeatherFallback} ${t.lastAvailableUpdate}: ${new Date(weather.lastUpdated).toLocaleString()}.`
+              : `${t.liveForecast} ${new Date(weather.lastUpdated).toLocaleString()}.`}
           </p>
           {/* Main Weather Hero */}
           <div className="weather-hero-banner">
@@ -90,19 +92,19 @@ export default function WeatherPage() {
 
             <div className="hero-metrics-grid">
               <div className="w-metric-box">
-                <small>🌧️ 24h Rain Probability</small>
+                <small>🌧️ {t.rainProbability24h}</small>
                 <strong>{weather.current.rainProbabilityPercent}%</strong>
               </div>
               <div className="w-metric-box">
-                <small>💧 Relative Humidity</small>
+                <small>💧 {t.relativeHumidityLabel}</small>
                 <strong>{weather.current.relativeHumidityPercent}%</strong>
               </div>
               <div className="w-metric-box">
-                <small>💨 Wind Speed</small>
+                <small>💨 {t.windSpeed}</small>
                 <strong>{weather.current.windSpeedKmh} km/h</strong>
               </div>
               <div className="w-metric-box">
-                <small>☀️ Evapotranspiration (ET0)</small>
+                <small>☀️ {t.evapotranspiration} (ET0)</small>
                 <strong>{weather.indices.referenceEt0} mm/day</strong>
               </div>
             </div>
@@ -114,29 +116,29 @@ export default function WeatherPage() {
                 {weather.indices.droughtRiskLevel === "LOW" ? "💧" : "☀️"}
               </div>
               <div className="advisory-body">
-                <span className="advisory-type">Field Water Balance & Drought Monitor</span>
+                <span className="advisory-type">{t.fieldWaterBalance}</span>
                 <h4>
-                  Estimated Daily Moisture Balance: {weather.indices.waterBalanceEstimatedMm} mm
+                  {t.estimatedDailyMoisture}: {weather.indices.waterBalanceEstimatedMm} mm
                 </h4>
                 <div className="advisory-quad">
                   <div>
-                    <strong>Reason:</strong>
+                    <strong>{t.reason}:</strong>
                     <p>
                       Atmospheric demand (ET0 = {weather.indices.referenceEt0} mm) vs incoming rainfall. Drought risk: <strong>{weather.indices.droughtRiskLevel}</strong>.
                     </p>
                   </div>
                   <div>
-                    <strong>Relevant Conditions:</strong>
+                    <strong>{t.relevantConditions}:</strong>
                     <p>
                       Max 7-day temp: {Math.max(...weather.daily.map((d) => d.maxTempCelsius))}°C · Accumulated 7-day rain: {weather.daily.reduce((sum, d) => sum + d.precipitationSumMm, 0).toFixed(1)} mm.
                     </p>
                   </div>
                   <div>
-                    <strong>Suggested Action:</strong>
+                    <strong>{t.suggestedAction}:</strong>
                     <p>
                       {weather.indices.droughtRiskLevel === "HIGH"
-                        ? "Prepare supplemental irrigation cycles and check root mulch to conserve moisture."
-                        : "Moisture balance is stable. Rain-fed crops have adequate transpiration reserve."}
+                        ? t.supplementalIrrigation
+                        : t.stableMoisture}
                     </p>
                   </div>
                 </div>
@@ -144,23 +146,23 @@ export default function WeatherPage() {
             </div>
           </div>
 
-          {/* 7-Day Agricultural Forecast Grid */}
+          {/* {t.sevenDayForecast} Grid */}
           <div className="panel forecast-panel">
             <div className="panel-header">
               <div>
-                <span className="section-kicker">Extended Planning Horizon</span>
-                <h3>7-Day Agricultural Forecast</h3>
+                <span className="section-kicker">{t.extendedPlanning}</span>
+                <h3>{t.sevenDayForecast}</h3>
               </div>
-              <span className="panel-hint">Updated hourly from regional meteorological models</span>
+              <span className="panel-hint">{t.hourlyForecast}</span>
             </div>
 
             <div className="daily-forecast-grid">
               {weather.daily.map((day, idx) => {
                 const dayName =
                   idx === 0
-                    ? "Today"
+                    ? t.today
                     : idx === 1
-                    ? "Tomorrow"
+                    ? t.tomorrow
                     : new Date(day.date).toLocaleDateString("en-UG", { weekday: "short" });
 
                 return (

@@ -1,4 +1,7 @@
 import type { RuleConfiguration } from "../types/ruleConfig";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase/config";
+import { authenticatedFetch } from "./authenticatedFetch";
 
 export const DEFAULT_RULE_CONFIG: RuleConfiguration = {
   id: "rule_config_v1_0",
@@ -56,5 +59,29 @@ export function saveRuleConfiguration(config: RuleConfiguration): void {
   } catch (err) {
     console.error("Could not persist rule config", err);
   }
+}
+
+export async function getRuleConfigurations(): Promise<RuleConfiguration[]> {
+  const snapshot = await getDocs(query(collection(db, "ruleConfigurations")));
+  return snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as RuleConfiguration)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+export async function refreshActiveRuleConfiguration(): Promise<RuleConfiguration> {
+  const snapshot = await getDocs(query(collection(db, "ruleConfigurations"), where("active", "==", true)));
+  const config = snapshot.docs[0]?.data() as RuleConfiguration | undefined;
+  if (!config?.version) return getActiveRuleConfiguration();
+  saveRuleConfiguration(config);
+  return config;
+}
+
+export async function saveRuleConfigurationToServer(config: RuleConfiguration): Promise<void> {
+  const response = await authenticatedFetch("/api/adminUpdateRules", {
+    method: "POST",
+    body: JSON.stringify({ ruleConfig: config }),
+  });
+  const result = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(result.error || "Rule configuration could not be saved.");
+  saveRuleConfiguration(config);
 }
 

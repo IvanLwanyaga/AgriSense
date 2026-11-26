@@ -4,10 +4,12 @@ import { getFarms, getFields } from "../services/firestoreService";
 import type { FarmActivity, FarmActivityType } from "../types/activity";
 import type { Farm, Field } from "../types/farm";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import type { AppPage } from "../types/navigation";
 
 export default function ActivitiesPage({ onNavigate }: { onNavigate?: (page: AppPage) => void }) {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [activities, setActivities] = useState<FarmActivity[]>([]);
   const [farms, setFarms] = useState<Farm[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
@@ -86,14 +88,14 @@ export default function ActivitiesPage({ onNavigate }: { onNavigate?: (page: App
     <section className="workspace-page activities-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">Farm Operations Journal</p>
-          <h2>Field Activities & Input Log</h2>
+          <p className="eyebrow">{t.culturalStandardKicker}</p>
+          <h2>{t.activities}</h2>
           <p>
-            Track planting dates, fertilizer applications, weeding, pest treatments, and harvesting costs.
+            {t.farmJournal}
           </p>
         </div>
         <button className="primary-button" onClick={() => setShowModal(true)} disabled={!farms.length}>
-          + Record Farm Activity
+          + {t.recordJournalBtn}
         </button>
       </div>
       {farms.length > 0 && (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import { setCurrentUserSmsConsent } from "../services/firestoreService";
 import PushNotificationsCard from "../components/PushNotificationsCard";
 
@@ -24,6 +25,7 @@ function loadPreferences(userId?: string) {
 
 export function SettingsPage() {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [initialPreferences] = useState(() => loadPreferences(user?.uid));
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [criticalAlerts, setCriticalAlerts] = useState(initialPreferences.criticalAlerts);
@@ -46,15 +48,15 @@ export function SettingsPage() {
     <section className="workspace-page settings-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">Workspace Preferences & Security</p>
-          <h2>Settings</h2>
-          <p>Choose a section to review or update your workspace preferences.</p>
+          <p className="eyebrow">{t.workspacePreferencesSecurity}</p>
+          <h2>{t.settingsTitle}</h2>
+          <p>{t.settingsDescription}</p>
         </div>
-        {activeSection !== "privacy" && <button className="primary-button" onClick={handleSave}>{saved ? "Saved" : "Save Changes"}</button>}
+        {activeSection !== "privacy" && <button className="primary-button" onClick={handleSave}>{saved ? t.saved : t.saveChanges}</button>}
       </div>
 
       <div className="settings-layout">
-        <nav className="settings-nav" aria-label="Settings sections" role="tablist" aria-orientation="vertical">
+        <nav className="settings-nav" aria-label={t.settingsSections} role="tablist" aria-orientation="vertical">
           {settingTabs.map((tab) => (
             <button
               key={tab.id}
@@ -66,7 +68,7 @@ export function SettingsPage() {
               aria-controls={`settings-panel-${tab.id}`}
               onClick={() => { setActiveSection(tab.id); setSaved(false); }}
             >
-              {tab.icon} <span>{tab.label}</span>
+              {tab.icon} <span>{{ account: t.accountProfile, notifications: t.notificationRules, offline: t.dataOfflineCache, privacy: t.securityPrivacy }[tab.id]}</span>
             </button>
           ))}
         </nav>
@@ -80,22 +82,22 @@ export function SettingsPage() {
         >
           {activeSection === "account" && (
             <div className="settings-section">
-              <div><h3>Profile Information</h3><p>Your signed-in account and regional preferences.</p></div>
+              <div><h3>{t.profileInformation}</h3><p>{t.signedInRegionalPreferences}</p></div>
               <div className="settings-form-grid">
-                <label>Full name<input value={profile?.fullName || user?.displayName || ""} readOnly /></label>
-                <label>Email address<input value={profile?.email || user?.email || ""} readOnly /></label>
-                <label>Workspace role<input value={profile?.role?.replace(/_/g, " ") || "FARMER"} readOnly /></label>
-                <label>Timezone<select value={timezone} onChange={(event) => setTimezone(event.target.value)}><option value="Africa/Kampala">Africa/Kampala (EAT, UTC+3)</option><option value="UTC">UTC</option></select></label>
+                <label>{t.fullName}<input value={profile?.fullName || user?.displayName || ""} readOnly /></label>
+                <label>{t.emailAddress}<input value={profile?.email || user?.email || ""} readOnly /></label>
+                <label>{t.workspaceRole}<input value={profile?.role?.replace(/_/g, " ") || "FARMER"} readOnly /></label>
+                <label>{t.timezone}<select value={timezone} onChange={(event) => setTimezone(event.target.value)}><option value="Africa/Kampala">Africa/Kampala (EAT, UTC+3)</option><option value="UTC">UTC</option></select></label>
               </div>
             </div>
           )}
 
           {activeSection === "notifications" && (
             <div className="settings-section">
-              <div><h3>Advisory Notifications</h3><p>Choose which farm updates appear in your workspace.</p></div>
-              <PreferenceToggle title="Critical BCTB risk alerts" description="Highlight elevated screening results that need prompt field review." checked={criticalAlerts} onChange={setCriticalAlerts} />
-              <PreferenceToggle title="Weather advisories" description="Show rainfall and dry-spell notices for your registered farms." checked={weatherAlerts} onChange={setWeatherAlerts} />
-              <PreferenceToggle title="Extension follow-up updates" description="Show progress when you consent to an officer verification referral." checked={extensionFollowUp} onChange={setExtensionFollowUp} />
+              <div><h3>{t.advisoryNotifications}</h3><p>{t.farmUpdatesPreference}</p></div>
+              <PreferenceToggle title={t.criticalBctbAlerts} description={t.criticalBctbDescription} checked={criticalAlerts} onChange={setCriticalAlerts} />
+              <PreferenceToggle title={t.weatherAdvisories} description={t.weatherAdvisoriesDescription} checked={weatherAlerts} onChange={setWeatherAlerts} />
+              <PreferenceToggle title={t.extensionFollowUp} description={t.extensionFollowUpDescription} checked={extensionFollowUp} onChange={setExtensionFollowUp} />
               <PushNotificationsCard />
             </div>
           )}

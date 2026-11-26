@@ -43,6 +43,12 @@ export function updateUserAccess(
   email: string,
   role: UserRole,
   status: "ACTIVE" | "INACTIVE",
+  assignedDistrict?: string,
 ): Promise<void> {
-  return postAdminAction("updateUserAccess", { email, role, status });
+  return postAdminAction("updateUserAccess", {
+    email,
+    role,
+    status,
+    ...(assignedDistrict ? { assignedDistrict } : {}),
+  });
 }

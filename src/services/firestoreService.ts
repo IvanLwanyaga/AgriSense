@@ -89,6 +89,19 @@ export async function getFarms(
   }
 }
 
+/** Read-only farm directory for an officer's assigned district. Firestore rules
+ * enforce the officer's district assignment on this query. */
+export async function getDistrictFarms(district: string): Promise<Farm[]> {
+  if (!district || !auth.currentUser?.uid) return [];
+  try {
+    const snapshot = await getDocs(query(collection(db, "farms"), where("district", "==", district)));
+    return snapshot.docs.map((farmDoc) => ({ id: farmDoc.id, ...farmDoc.data() }) as Farm);
+  } catch (error) {
+    console.error("District farm directory could not be loaded.", error);
+    throw new Error("Farm records for your assigned district could not be loaded. Check your connection and account permissions.", { cause: error });
+  }
+}
+
 export async function getOrganizationScreenings(organizationId: string): Promise<BctbRiskResult[]> {
   const userId = auth.currentUser?.uid;
   if (!userId || !organizationId) {

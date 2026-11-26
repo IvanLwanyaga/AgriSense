@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import { reviewOfficerApplication as submitOfficerReview } from "../services/adminService";
 
 interface OfficerApplication {
@@ -21,6 +22,13 @@ interface OfficerApplication {
 
 export default function StaffApplicationsPage() {
   const { user, profile } = useAuth();
+  const { language } = useLanguage();
+  const c = {
+    en: { denied: "Administrator access required", deniedHelp: "Only platform administrators can approve officer privileges.", kicker: "TEAM ACCESS", title: "Extension officer applications", intro: "Verify each applicantâ€™s work details before granting access to farmer referrals and district casework.", pending: "pending", loading: "Loading applicationsâ€¦", caughtUp: "All caught up", none: "There are no officer applications waiting for review.", unnamed: "Unnamed applicant", noOrg: "Organization not provided", needsReview: "Needs review", workId: "Work ID", district: "District", subCounty: "Sub-county", contact: "Contact", notProvided: "Not provided", decline: "Decline", saving: "Savingâ€¦", approve: "Approve officer access" },
+    lg: { denied: "Kyetaagisa olukusa lw'omuddukanya", deniedHelp: "Abaddukanya omukutu bokka be basobola kukkiriza abakugu okukola.", kicker: "OKUYINGIZA ABAKOZI", title: "Okusaba kw'abakugu b'ebyobulimi", intro: "Kebera omulimu n'ebiwandiiko by'omusaba nga tonnamuwa lukusa lwa mirimu gy'abalimi n'emisango gya disitulikiti.", pending: "birindiridde", loading: "Okusaba kuteekebwaâ€¦", caughtUp: "Tewali kusaba kulindiridde", none: "Tewali kusaba kw'abakugu kulindiridde kukeberwa.", unnamed: "Omusaba atalina linnya", noOrg: "Ekibiina tekiteereddwa", needsReview: "Kyetaaga okukeberwa", workId: "Namba y'omukozi", district: "Disitulikiti", subCounty: "Gombolola", contact: "Endagiriro", notProvided: "Titeereddwa", decline: "Gaana", saving: "Biterekebwaâ€¦", approve: "Kkiriza omukugu okukola" },
+    sw: { denied: "Ufikiaji wa msimamizi unahitajika", deniedHelp: "Wasimamizi wa mfumo pekee wanaweza kuidhinisha ruhusa za maafisa.", kicker: "UFIKIAJI WA TIMU", title: "Maombi ya maafisa ugani", intro: "Thibitisha maelezo ya kazi ya mwombaji kabla ya kumpa ufikiaji wa rufaa za wakulima na kesi za wilaya.", pending: "yanasubiri", loading: "Inapakia maombiâ€¦", caughtUp: "Yote yamekaguliwa", none: "Hakuna maombi ya afisa yanayosubiri ukaguzi.", unnamed: "Mwombaji asiye na jina", noOrg: "Shirika halijatolewa", needsReview: "Yanahitaji ukaguzi", workId: "Nambari ya kazi", district: "Wilaya", subCounty: "Kaunti ndogo", contact: "Mawasiliano", notProvided: "Haijatolewa", decline: "Kataa", saving: "Inahifadhiâ€¦", approve: "Idhinisha ufikiaji wa afisa" },
+    nyn: { denied: "Nikwetenga obushobozi bwa mutegyeki", deniedHelp: "Abategyeki ba pulatifomu bonka nibo barikubaasa kwikiriza emirimo y'abahabuzi.", kicker: "OKUINGIZA ABAKOZI", title: "Okushaba kw'abahabuzi b'eby'obuhingi", intro: "Hamya emirimo y'omushabi otakamuha obushobozi bw'okureeba abariimi n'emishango ya disiturikiti.", pending: "ebitegereize", loading: "Okushaba nikutwarwaâ€¦", caughtUp: "Byona bihweire", none: "Tihariho kushaba kw'omuhabuzi okute gereize kureebwa.", unnamed: "Omushabi ataine eiziina", noOrg: "Ekibiina tikigambirwe", needsReview: "Nikwetenga kureebwa", workId: "Namba y'omukozi", district: "Disiturikiti", subCounty: "Gomborora", contact: "Obuhwezi", notProvided: "Tikirahairwe", decline: "Yanga", saving: "Nibibikwaâ€¦", approve: "Ikiriza omuhabuzi kukora" }
+  }[language];
   const [applications, setApplications] = useState<OfficerApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,30 +77,30 @@ export default function StaffApplicationsPage() {
   }
 
   if (!isAdmin) {
-    return <section className="panel role-access-denied"><h2>Administrator access required</h2><p>Only platform administrators can approve officer privileges.</p></section>;
+    return <section className="panel role-access-denied"><h2>{c.denied}</h2><p>{c.deniedHelp}</p></section>;
   }
 
   return (
     <section className="staff-applications-page">
       <header className="staff-applications-hero panel">
-        <div><span className="section-kicker">TEAM ACCESS</span><h2>Extension officer applications</h2><p>Verify each applicant’s work details before granting access to farmer referrals and district casework.</p></div>
-        <span className="staff-applications-count">{applications.length} pending</span>
+        <div><span className="section-kicker">TEAM ACCESS</span><h2>Extension officer applications</h2><p>Verify each applicantâ€™s work details before granting access to farmer referrals and district casework.</p></div>
+        <span className="staff-applications-count">{applications.length} {c.pending}</span>
       </header>
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <p className="form-success" role="status">{notice}</p>}
-      {loading ? <section className="panel staff-applications-empty">Loading applications…</section> : applications.length === 0 ? (
-        <section className="panel staff-applications-empty"><span aria-hidden="true">✓</span><h3>All caught up</h3><p>There are no officer applications waiting for review.</p></section>
+      {loading ? <section className="panel staff-applications-empty">Loading applicationsâ€¦</section> : applications.length === 0 ? (
+        <section className="panel staff-applications-empty"><span aria-hidden="true">âœ“</span><h3>{c.caughtUp}</h3><p>{c.none}</p></section>
       ) : (
         <div className="staff-applications-list">{applications.map((application) => (
           <article className="panel staff-application-card" key={application.id}>
-            <div className="staff-application-heading"><div className="staff-applicant-avatar">{(application.fullName || "?").slice(0, 1).toUpperCase()}</div><div><h3>{application.fullName || "Unnamed applicant"}</h3><p>{application.organizationName || "Organization not provided"}</p></div><span className="staff-pending-badge">Needs review</span></div>
+            <div className="staff-application-heading"><div className="staff-applicant-avatar">{(application.fullName || "?").slice(0, 1).toUpperCase()}</div><div><h3>{application.fullName || c.unnamed}</h3><p>{application.organizationName || c.noOrg}</p></div><span className="staff-pending-badge">{c.needsReview}</span></div>
             <dl className="staff-application-details">
-              <div><dt>Work ID</dt><dd>{application.staffId || "Not provided"}</dd></div>
-              <div><dt>District</dt><dd>{application.assignedDistrict || "Not provided"}</dd></div>
-              <div><dt>Sub-county</dt><dd>{application.assignedSubCounty || "Not provided"}</dd></div>
-              <div><dt>Contact</dt><dd>{application.phone || application.email || "Not provided"}</dd></div>
+              <div><dt>{c.workId}</dt><dd>{application.staffId || c.notProvided}</dd></div>
+              <div><dt>{c.district}</dt><dd>{application.assignedDistrict || c.notProvided}</dd></div>
+              <div><dt>{c.subCounty}</dt><dd>{application.assignedSubCounty || c.notProvided}</dd></div>
+              <div><dt>{c.contact}</dt><dd>{application.phone || application.email || c.notProvided}</dd></div>
             </dl>
-            <footer className="staff-application-actions"><button type="button" className="outline-button" onClick={() => void reviewApplication(application, false)} disabled={Boolean(workingId)}>Decline</button><button type="button" className="primary-button" onClick={() => void reviewApplication(application, true)} disabled={Boolean(workingId)}>{workingId === application.id ? "Saving…" : "Approve officer access"}</button></footer>
+            <footer className="staff-application-actions"><button type="button" className="outline-button" onClick={() => void reviewApplication(application, false)} disabled={Boolean(workingId)}>{c.decline}</button><button type="button" className="primary-button" onClick={() => void reviewApplication(application, true)} disabled={Boolean(workingId)}>{workingId === application.id ? "Savingâ€¦" : "Approve officer access"}</button></footer>
           </article>
         ))}</div>
       )}

@@ -1,14 +1,20 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import {
   getActiveRuleConfiguration,
-  saveRuleConfiguration,
   DEFAULT_RULE_CONFIG,
+  getRuleConfigurations,
+  saveRuleConfigurationToServer,
 } from "../services/bctbRuleConfig";
 import { getFollowUpCases } from "../services/bctbAssessmentService";
 import { runAllRiskEngineAcceptanceTests } from "../services/bctbRiskEngine.test";
 import type { RuleConfiguration } from "../types/ruleConfig";
 import type { FollowUpCase } from "../types/followUp";
+import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../firebase/config";
+import { updateUserAccess } from "../services/adminService";
+import { UGANDA_DISTRICTS } from "../services/agronomyData";
 
 interface AuditItem {
   id: string;
@@ -18,64 +24,17 @@ interface AuditItem {
   details: string;
 }
 
-const INITIAL_AUDIT_LOGS: AuditItem[] = [
-  {
-    id: "aud_01",
-    action: "RULE_CONFIG_ACTIVATED",
-    performedBy: "admin@agrisense.ug",
-    timestamp: "2026-09-01T00:00:00Z",
-    details: "Activated Uganda Robusta BCTB Expert Rules v1.0.0 (pending agronomist validation).",
-  },
-  {
-    id: "aud_02",
-    action: "OFFICER_ASSIGNMENT",
-    performedBy: "admin@agrisense.ug",
-    timestamp: "2026-09-05T10:15:00Z",
-    details: "Assigned Muwonge David (BSc Agronomy) to Mukono District coffee administrative area.",
-  },
-  {
-    id: "aud_03",
-    action: "OFFICER_ASSIGNMENT",
-    performedBy: "admin@agrisense.ug",
-    timestamp: "2026-09-05T10:16:00Z",
-    details: "Assigned Namubiru Sarah to Wakiso District coffee administrative area.",
-  },
-];
-
 interface OfficerAssignment {
   id: string;
   name: string;
   email: string;
   district: string;
-  status: "ACTIVE" | "ON_LEAVE";
+  status: "ACTIVE" | "INACTIVE";
 }
-
-const INITIAL_OFFICERS: OfficerAssignment[] = [
-  {
-    id: "off_01",
-    name: "Muwonge David (BSc Agronomy)",
-    email: "officer.mukono@agrisense.ug",
-    district: "Mukono",
-    status: "ACTIVE",
-  },
-  {
-    id: "off_02",
-    name: "Namubiru Sarah",
-    email: "officer.wakiso@agrisense.ug",
-    district: "Wakiso",
-    status: "ACTIVE",
-  },
-  {
-    id: "off_03",
-    name: "Kibalama Paul",
-    email: "officer.luweero@agrisense.ug",
-    district: "Luweero",
-    status: "ACTIVE",
-  },
-];
 
 export default function GovernancePage() {
   const { profile } = useAuth();
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<"STATS" | "RULES" | "OFFICERS" | "REGISTRY" | "AUDIT" | "TESTS">("STATS");
   const [testReport, setTestReport] = useState<ReturnType<typeof runAllRiskEngineAcceptanceTests> | null>(null);
 
@@ -86,35 +45,77 @@ export default function GovernancePage() {
 
   // Rule configuration state
   const [activeRule, setActiveRule] = useState<RuleConfiguration>(getActiveRuleConfiguration());
-  const [ruleList, setRuleList] = useState<RuleConfiguration[]>([
-    DEFAULT_RULE_CONFIG,
-    {
-      ...DEFAULT_RULE_CONFIG,
-      id: "rule_config_v1_1_draft",
-      version: "bctb-rules-v1.1.0-draft",
-      name: "Uganda Robusta Coffee BCTB Rules V1.1 (Candidate)",
-      active: false,
-      weights: { ...DEFAULT_RULE_CONFIG.weights, pinSizedHoles: 35 },
-      createdAt: "2026-09-10T12:00:00Z",
-    },
-  ]);
+  const [ruleList, setRuleList] = useState<RuleConfiguration[]>([DEFAULT_RULE_CONFIG]);
   const [newVersionTag, setNewVersionTag] = useState("bctb-rules-v1.1.0");
   const [newVersionName, setNewVersionName] = useState("Enhanced BCTB Rainy Season Calibration");
   const [editWeights, setEditWeights] = useState({ ...activeRule.weights });
   const [feedback, setFeedback] = useState("");
+  const [savingRule, setSavingRule] = useState(false);
 
   // Officer assignments
-  const [officers, setOfficers] = useState<OfficerAssignment[]>(INITIAL_OFFICERS);
-  const [selectedOfficerId, setSelectedOfficerId] = useState("off_01");
+  const [officers, setOfficers] = useState<OfficerAssignment[]>([]);
+  const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [newAssignedDistrict, setNewAssignedDistrict] = useState("Mukono");
+  const [savingOfficerAssignment, setSavingOfficerAssignment] = useState(false);
+  const [officerLoadError, setOfficerLoadError] = useState("");
 
   // Audit trail
-  const [auditLogs, setAuditLogs] = useState<AuditItem[]>(INITIAL_AUDIT_LOGS);
+  const [auditLogs, setAuditLogs] = useState<AuditItem[]>([]);
 
   // Statistics calculation
   const [allCases, setAllCases] = useState<FollowUpCase[]>([]);
 
   useEffect(() => {
+    let active = true;
+    void getRuleConfigurations().then((configs) => {
+      if (!active || !configs.length) return;
+      setRuleList(configs);
+      const selected = configs.find((config) => config.active) || configs[0];
+      setActiveRule(selected);
+      setEditWeights({ ...selected.weights });
+    }).catch((error: unknown) => console.warn("Could not load saved rule versions.", error));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const officerUnsubscribe = onSnapshot(
+      query(collection(db, "users"), where("role", "==", "AGRICULTURAL_OFFICER"), limit(200)),
+      (snapshot) => {
+        const loaded = snapshot.docs.map((item) => {
+          const data = item.data();
+          return {
+            id: item.id,
+            name: typeof data.fullName === "string" ? data.fullName : "Extension officer",
+            email: typeof data.email === "string" ? data.email : "",
+            district: typeof data.assignedDistrict === "string" ? data.assignedDistrict : "Unassigned",
+            status: data.status === "ACTIVE" ? "ACTIVE" as const : "INACTIVE" as const,
+          };
+        }).sort((left, right) => left.name.localeCompare(right.name));
+        setOfficers(loaded);
+        setSelectedOfficerId((current) => loaded.some((item) => item.id === current) ? current : loaded[0]?.id || "");
+        setOfficerLoadError("");
+      },
+      (error) => {
+        console.error("Could not load officer assignments.", error);
+        setOfficerLoadError("Officer accounts could not be loaded. Confirm platform administrator access.");
+      },
+    );
+    const auditUnsubscribe = onSnapshot(query(collection(db, "auditLogs"), limit(100)), (snapshot) => {
+      const loaded = snapshot.docs.map((item) => {
+        const data = item.data();
+        const timestamp = data.timestamp && typeof data.timestamp === "object" && "toDate" in data.timestamp
+          ? (data.timestamp as { toDate: () => Date }).toDate().toISOString()
+          : typeof data.timestamp === "string" ? data.timestamp : "";
+        return {
+          id: item.id,
+          action: typeof data.action === "string" ? data.action : "SYSTEM_ACTION",
+          performedBy: typeof data.adminEmail === "string" ? data.adminEmail : typeof data.adminId === "string" ? data.adminId : "System",
+          timestamp,
+          details: typeof data.details === "string" ? data.details : typeof data.ruleVersion === "string" ? `Rule configuration ${data.ruleVersion}` : typeof data.targetEmail === "string" ? `${data.role || "Account"} · ${data.status || "updated"}${data.assignedDistrict ? ` · ${data.assignedDistrict}` : ""} · ${data.targetEmail}` : "Recorded administrative action",
+        };
+      }).sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+      setAuditLogs(loaded);
+    }, (error) => console.error("Could not load live administrative audit events.", error));
     let isMounted = true;
     void getFollowUpCases("ALL")
       .then((loaded) => {
@@ -125,6 +126,8 @@ export default function GovernancePage() {
       });
     return () => {
       isMounted = false;
+      officerUnsubscribe();
+      auditUnsubscribe();
     };
   }, []);
 
@@ -133,12 +136,19 @@ export default function GovernancePage() {
   const lowRiskTotal = allCases.filter((c) => c.riskLevel === "LOW").length;
   const verifiedBctbTotal = allCases.filter((c) => c.verifiedObservation === "confirmed_bctb").length;
 
-  function handleSaveNewRuleVersion(e: React.FormEvent) {
+  async function handleSaveNewRuleVersion(e: React.FormEvent) {
     e.preventDefault();
-    if (!newVersionTag.trim()) return;
-
+    if (!newVersionTag.trim() || savingRule) return;
+    if (activeRule.thresholds.lowMax >= activeRule.thresholds.moderateMax) {
+      setFeedback("Low-risk maximum must be lower than the moderate-risk maximum.");
+      return;
+    }
+    if (Object.values(editWeights).some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
+      setFeedback("Rule weights must be between 0 and 100.");
+      return;
+    }
     const newConfig: RuleConfiguration = {
-      id: `rule_${Date.now()}`,
+      id: newVersionTag.trim(),
       version: newVersionTag.trim(),
       name: newVersionName.trim() || newVersionTag.trim(),
       description: "Externalized expert-rule weights for BCTB Robusta screening.",
@@ -148,67 +158,58 @@ export default function GovernancePage() {
       thresholds: { ...activeRule.thresholds },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      author: profile?.email || "admin@agrisense.ug",
+      author: profile?.email || "Platform administrator",
     };
-
-    // Mark previous as inactive and add new version
-    const updatedList = ruleList.map((r) => ({ ...r, active: false }));
-    updatedList.unshift(newConfig);
-
-    setRuleList(updatedList);
-    setActiveRule(newConfig);
-    saveRuleConfiguration(newConfig);
-
-    // Add to audit ledger
-    const logItem: AuditItem = {
-      id: `aud_${Date.now()}`,
-      action: "RULE_VERSION_CREATED_AND_ACTIVATED",
-      performedBy: profile?.email || "admin@agrisense.ug",
-      timestamp: new Date().toISOString(),
-      details: `Created version ${newConfig.version} and set as active. Previous versions preserved immutable.`,
-    };
-    setAuditLogs([logItem, ...auditLogs]);
-    setFeedback(`✓ New rule configuration "${newConfig.version}" created and activated!`);
+    setSavingRule(true);
+    setFeedback("");
+    try {
+      await saveRuleConfigurationToServer(newConfig);
+      setRuleList([newConfig, ...ruleList.map((item) => ({ ...item, active: false }))]);
+      setActiveRule(newConfig);
+      setFeedback(`Rule configuration "${newConfig.version}" created and activated.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Rule configuration could not be saved.");
+    } finally {
+      setSavingRule(false);
+    }
   }
 
-  function handleActivateVersion(config: RuleConfiguration) {
-    const updatedList = ruleList.map((r) => ({ ...r, active: r.id === config.id }));
-    setRuleList(updatedList);
+  async function handleActivateVersion(config: RuleConfiguration) {
     const target = { ...config, active: true };
-    setActiveRule(target);
-    saveRuleConfiguration(target);
-
-    const logItem: AuditItem = {
-      id: `aud_${Date.now()}`,
-      action: "RULE_VERSION_ACTIVATED",
-      performedBy: profile?.email || "admin@agrisense.ug",
-      timestamp: new Date().toISOString(),
-      details: `Switched active rule engine configuration to ${config.version}.`,
-    };
-    setAuditLogs([logItem, ...auditLogs]);
-    setFeedback(`✓ Switched active rule engine to ${config.version}`);
+    setSavingRule(true);
+    setFeedback("");
+    try {
+      await saveRuleConfigurationToServer(target);
+      setRuleList(ruleList.map((item) => ({ ...item, active: item.id === target.id })));
+      setActiveRule(target);
+      setEditWeights({ ...target.weights });
+      setFeedback(`Switched active rule engine to ${config.version}.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Rule version could not be activated.");
+    } finally {
+      setSavingRule(false);
+    }
   }
 
-  function handleReassignOfficer(e: React.FormEvent) {
+  async function handleReassignOfficer(e: React.FormEvent) {
     e.preventDefault();
-    const updated = officers.map((o) =>
-      o.id === selectedOfficerId ? { ...o, district: newAssignedDistrict } : o
-    );
-    setOfficers(updated);
-
     const targetOff = officers.find((o) => o.id === selectedOfficerId);
-    const logItem: AuditItem = {
-      id: `aud_${Date.now()}`,
-      action: "OFFICER_REASSIGNED",
-      performedBy: profile?.email || "admin@agrisense.ug",
-      timestamp: new Date().toISOString(),
-      details: `Reassigned ${targetOff?.name} to ${newAssignedDistrict} District.`,
-    };
-    setAuditLogs([logItem, ...auditLogs]);
-    setFeedback(`✓ Reassigned officer to ${newAssignedDistrict} District.`);
+    if (!targetOff || !newAssignedDistrict.trim() || savingOfficerAssignment) return;
+    setSavingOfficerAssignment(true);
+    setFeedback("");
+    try {
+      await updateUserAccess(targetOff.email, "AGRICULTURAL_OFFICER", targetOff.status, newAssignedDistrict.trim());
+      setFeedback(`Officer assigned to ${newAssignedDistrict} District.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Officer assignment could not be saved.");
+    } finally {
+      setSavingOfficerAssignment(false);
+    }
   }
 
   function handleExportAggregateReport() {
+    const districtCases = new Map<string, FollowUpCase[]>();
+    allCases.forEach((item) => districtCases.set(item.district, [...(districtCases.get(item.district) || []), item]));
     const reportData = {
       exportTimestamp: new Date().toISOString(),
       governanceScope: "Uganda Robusta Coffee BCTB Pilot",
@@ -220,12 +221,14 @@ export default function GovernancePage() {
         lowRiskCases: lowRiskTotal,
         empiricallyVerifiedBctb: verifiedBctbTotal,
       },
-      anonymizedDistrictAggregates: [
-        { district: "Mukono", totalCases: 2, highRiskRate: "50%", confirmedRate: "0%" },
-        { district: "Wakiso", totalCases: 1, highRiskRate: "100%", confirmedRate: "100%" },
-      ],
+      anonymizedDistrictAggregates: [...districtCases.entries()].map(([district, cases]) => ({
+        district,
+        totalCases: cases.length,
+        highRiskRate: `${Math.round((cases.filter((item) => item.riskLevel === "HIGH").length / cases.length) * 100)}%`,
+        confirmedRate: `${Math.round((cases.filter((item) => item.verifiedObservation === "confirmed_bctb").length / cases.length) * 100)}%`,
+      })),
       academicDisclaimer:
-        "DEMONSTRATION AND PILOT EVALUATION REPORT. NOT INTENDED FOR PESTICIDE PRESCRIPTION.",
+        "Screening supports extension follow-up and is not a diagnosis or pesticide prescription.",
     };
 
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
@@ -241,16 +244,12 @@ export default function GovernancePage() {
     <section className="workspace-page governance-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">System Administration & Audit Ledger</p>
-          <h2>Platform Governance & Rule Management</h2>
-          <p>
-            Manage versioned rule configurations, assign extension officers to administrative areas, inspect immutable audit trails, and review system statistics.
-          </p>
+          <p className="eyebrow">{t.governanceEyebrow}</p>
+          <h2>{t.governanceTitle}</h2>
+          <p>{t.governanceIntro}</p>
         </div>
 
-        <button className="outline-button" type="button" onClick={handleExportAggregateReport}>
-          📥 Export Anonymized Report (JSON)
-        </button>
+        <button className="outline-button" type="button" onClick={handleExportAggregateReport}>{t.exportAggregate}</button>
       </div>
 
       {/* Navigation Tabs */}
@@ -260,35 +259,35 @@ export default function GovernancePage() {
           onClick={() => setActiveTab("STATS")}
           type="button"
         >
-          📊 System Statistics
+          📊 {t.systemStatistics}
         </button>
         <button
           className={`xai-tab ${activeTab === "RULES" ? "active" : ""}`}
           onClick={() => setActiveTab("RULES")}
           type="button"
         >
-          ⚙️ Rule Configuration ({ruleList.length})
+          ⚙️ {t.ruleConfiguration} ({ruleList.length})
         </button>
         <button
           className={`xai-tab ${activeTab === "OFFICERS" ? "active" : ""}`}
           onClick={() => setActiveTab("OFFICERS")}
           type="button"
         >
-          👮 Extension Officer Areas ({officers.length})
+          👮 {t.officerAreas} ({officers.length})
         </button>
         <button
           className={`xai-tab ${activeTab === "REGISTRY" ? "active" : ""}`}
           onClick={() => setActiveTab("REGISTRY")}
           type="button"
         >
-          🤖 Model Registry (Research Only)
+          🤖 {t.modelGovernance}
         </button>
         <button
           className={`xai-tab ${activeTab === "AUDIT" ? "active" : ""}`}
           onClick={() => setActiveTab("AUDIT")}
           type="button"
         >
-          📜 Immutable Audit Ledger ({auditLogs.length})
+          📜 {t.auditLedger} ({auditLogs.length})
         </button>
         <button
           className={`xai-tab ${activeTab === "TESTS" ? "active" : ""}`}
@@ -298,7 +297,7 @@ export default function GovernancePage() {
           }}
           type="button"
         >
-          🧪 Acceptance Tests (10 Scenarios)
+          🧪 {t.riskEngineTests}
         </button>
       </div>
 
@@ -406,6 +405,7 @@ export default function GovernancePage() {
                         <button
                           className="outline-button-sm"
                           type="button"
+                          disabled={savingRule}
                           onClick={() => handleActivateVersion(r)}
                         >
                           Activate
@@ -477,6 +477,11 @@ export default function GovernancePage() {
               </label>
 
               <label>
+                Twig Wilting / Drying:
+                <input type="number" min="0" max="100" value={editWeights.twigWiltingDrying} onChange={(e) => setEditWeights({ ...editWeights, twigWiltingDrying: Number(e.target.value) })} />
+              </label>
+
+              <label>
                 Previous BCTB History:
                 <input
                   type="number"
@@ -496,6 +501,36 @@ export default function GovernancePage() {
                     setEditWeights({ ...editWeights, twigBlackening: Number(e.target.value) })
                   }
                 />
+              </label>
+
+              <label>
+                Leaf Yellowing:
+                <input type="number" min="0" max="100" value={editWeights.leafYellowing} onChange={(e) => setEditWeights({ ...editWeights, leafYellowing: Number(e.target.value) })} />
+              </label>
+
+              <label>
+                Points per Affected Twig:
+                <input type="number" min="0" max="100" value={editWeights.affectedTwigCountFactor} onChange={(e) => setEditWeights({ ...editWeights, affectedTwigCountFactor: Number(e.target.value) })} />
+              </label>
+
+              <label>
+                Maximum Twig Count Score:
+                <input type="number" min="0" max="100" value={editWeights.maxTwigCountScore} onChange={(e) => setEditWeights({ ...editWeights, maxTwigCountScore: Number(e.target.value) })} />
+              </label>
+
+              <label>
+                Poor Farm Sanitation:
+                <input type="number" min="0" max="100" value={editWeights.poorSanitation} onChange={(e) => setEditWeights({ ...editWeights, poorSanitation: Number(e.target.value) })} />
+              </label>
+
+              <label>
+                Inconsistent Twig Removal:
+                <input type="number" min="0" max="100" value={editWeights.inconsistentTwigRemoval} onChange={(e) => setEditWeights({ ...editWeights, inconsistentTwigRemoval: Number(e.target.value) })} />
+              </label>
+
+              <label>
+                Dense Shade:
+                <input type="number" min="0" max="100" value={editWeights.denseShade} onChange={(e) => setEditWeights({ ...editWeights, denseShade: Number(e.target.value) })} />
               </label>
 
               <label>
@@ -521,8 +556,18 @@ export default function GovernancePage() {
               </label>
             </div>
 
-            <button className="primary-button" type="submit">
-              Save & Activate New Rule Version
+            <h4>Risk Classification Thresholds:</h4>
+            <div className="form-row">
+              <label>Maximum Low-Risk Score
+                <input type="number" min="0" max="98" value={activeRule.thresholds.lowMax} onChange={(e) => setActiveRule({ ...activeRule, thresholds: { ...activeRule.thresholds, lowMax: Number(e.target.value) } })} />
+              </label>
+              <label>Maximum Moderate-Risk Score
+                <input type="number" min="1" max="99" value={activeRule.thresholds.moderateMax} onChange={(e) => setActiveRule({ ...activeRule, thresholds: { ...activeRule.thresholds, moderateMax: Number(e.target.value) } })} />
+              </label>
+            </div>
+
+            <button className="primary-button" type="submit" disabled={savingRule}>
+              {savingRule ? "Saving rule version…" : "Save & Activate New Rule Version"}
             </button>
           </form>
         </div>
@@ -540,6 +585,8 @@ export default function GovernancePage() {
                 <h3>Extension Officer District Assignments</h3>
               </div>
             </div>
+            {officerLoadError && <p className="form-error" role="alert">{officerLoadError}</p>}
+            {!officers.length && !officerLoadError && <p className="sub-note">No extension officer accounts are registered yet.</p>}
 
             <table className="history-table">
               <thead>
@@ -570,6 +617,7 @@ export default function GovernancePage() {
                   <select
                     value={selectedOfficerId}
                     onChange={(e) => setSelectedOfficerId(e.target.value)}
+                    disabled={!officers.length || savingOfficerAssignment}
                   >
                     {officers.map((o) => (
                       <option key={o.id} value={o.id}>
@@ -584,18 +632,15 @@ export default function GovernancePage() {
                   <select
                     value={newAssignedDistrict}
                     onChange={(e) => setNewAssignedDistrict(e.target.value)}
+                    disabled={savingOfficerAssignment}
                   >
-                    <option value="Mukono">Mukono District</option>
-                    <option value="Wakiso">Wakiso District</option>
-                    <option value="Luweero">Luweero District</option>
-                    <option value="Masaka">Masaka District</option>
-                    <option value="Mpigi">Mpigi District</option>
+                    {UGANDA_DISTRICTS.map((district) => <option key={district.name} value={district.name}>{district.name} District</option>)}
                   </select>
                 </label>
               </div>
 
-              <button className="primary-button" type="submit">
-                Update Officer Assignment
+              <button className="primary-button" type="submit" disabled={savingOfficerAssignment || !selectedOfficerId}>
+                {savingOfficerAssignment ? "Saving assignment…" : "Update Officer Assignment"}
               </button>
             </form>
           </div>
@@ -692,7 +737,7 @@ export default function GovernancePage() {
             <div className="panel-header">
               <div>
                 <span className="section-kicker">Deterministic Risk Engine Verification</span>
-                <h3>Automated Risk Engine Acceptance Tests (10 Scenarios)</h3>
+                <h3>Automated Risk Engine {t.riskEngineTests}</h3>
                 <p>
                   Evaluates the deterministic BCTB Expert Rules engine against all 10 required acceptance scenarios defined in Section 25.4.
                 </p>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import GooglePlacesLocationPicker, { type SelectedGoogleLocation } from "../components/GooglePlacesLocationPicker";
 import {
   createFarm,
@@ -15,6 +16,7 @@ import { canAddFarm } from "../services/subscriptionService";
 
 export default function Farms() {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [farms, setFarms] = useState<Farm[]>([]);
   const [selectedFarm, setSelectedFarm] = useState<Farm | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
@@ -255,14 +257,14 @@ export default function Farms() {
     <section className="workspace-page farms-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">Agricultural Property & Field Registry</p>
-          <h2>Farms & Fields</h2>
+          <p className="eyebrow">{t.farmerHubKicker}</p>
+          <h2>{t.myFarms}</h2>
           <p>
-            Manage growing sites, field boundaries, crop varieties, and soil profiles across Uganda.
+            {t.farmsAndFields}
           </p>
         </div>
         <button className="primary-button" onClick={handleOpenFarmModal}>
-          + Register New Farm
+          + {t.registerFarm}
         </button>
       </div>
 
@@ -273,23 +275,23 @@ export default function Farms() {
         <div className="farm-stat-chips">
           <div className="farm-stat">
             <strong>{farms.length}</strong>
-            <span>Total Farms</span>
+            <span>{t.totalFarms}</span>
           </div>
           <div className="farm-stat">
             <strong>
               {farms.reduce((sum, f) => sum + (f.area || 0), 0).toFixed(1)} ha
             </strong>
-            <span>Total Area</span>
+            <span>{t.totalArea}</span>
           </div>
           <div className="farm-stat">
             <strong>{fields.length}</strong>
-            <span>Fields on Active Farm</span>
+            <span>{t.activeFarmFields}</span>
           </div>
         </div>
         <input
           type="text"
           className="farm-search"
-          placeholder="Search by farm name or district..."
+          placeholder={t.searchFarm}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -298,14 +300,14 @@ export default function Farms() {
       {/* Farm Cards Grid */}
       {loading ? (
         <div className="empty-workspace">
-          <h3>Loading registered farms...</h3>
+          <h3>{t.loadingFarms}</h3>
         </div>
       ) : filteredFarms.length === 0 ? (
         <div className="empty-workspace">
           <div className="empty-icon">⌂</div>
-          <h3>No farms registered yet</h3>
+          <h3>{t.noFarms}</h3>
           <p>
-            Create your first farm in any Ugandan district to begin receiving location-specific AI recommendations and weather insights.
+            {t.noFarmsHelp}
           </p>
           <button className="primary-button" onClick={handleOpenFarmModal}>
             Register First Farm <span>→</span>
@@ -315,7 +317,7 @@ export default function Farms() {
         <div className="farms-layout-grid">
           {/* Farm selector list */}
           <div className="farm-selection-column">
-            <h3 className="section-title">Your Farms ({filteredFarms.length})</h3>
+            <h3 className="section-title">{t.yourFarms} ({filteredFarms.length})</h3>
             <div className="farms-list-vertical">
               {filteredFarms.map((farm) => {
                 const isSelected = selectedFarm?.id === farm.id;
@@ -333,19 +335,19 @@ export default function Farms() {
                         </span>
                       </div>
                       <span className={`farm-type-pill ${farm.organizationId ? "org" : "indie"}`}>
-                        {farm.organizationId ? "Cooperative" : "Standalone"}
+                        {farm.organizationId ? t.cooperative : t.standalone}
                       </span>
                     </div>
                     <p className="farm-item-desc">{farm.description}</p>
                     <div className="farm-item-footer">
-                      <span>Area: {farm.area ? `${farm.area} ha` : "Unspecified"}</span>
+                      <span>{t.areaLabel}: {farm.area ? `${farm.area} ha` : t.unspecified}</span>
                       <button
                         className="delete-farm-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteFarm(farm.id);
                         }}
-                        title="Delete farm record"
+                        title={t.deleteFarm}
                       >
                         🗑️
                       </button>
@@ -362,7 +364,7 @@ export default function Farms() {
               <div className="panel farm-inspector-panel">
                 <div className="panel-header">
                   <div>
-                    <span className="section-kicker">Active Growing Site</span>
+                    <span className="section-kicker">{t.activeGrowingSite}</span>
                     <h3>{selectedFarm.name}</h3>
                     <p className="farm-coords">
                       GPS: {selectedFarm.location.latitude.toFixed(4)}° N,{" "}
@@ -374,21 +376,21 @@ export default function Farms() {
                     className="primary-button outline"
                     onClick={() => setShowFieldModal(true)}
                   >
-                    + Add Field / Plot
+                    + {t.addFieldPlot}
                   </button>
                 </div>
 
                 {/* Fields Table / Grid */}
                 <div className="fields-container">
-                  <h4>Registered Plots & Fields ({fields.length})</h4>
+                  <h4>{t.registeredPlotsFields} ({fields.length})</h4>
                   {fields.length === 0 ? (
                     <div className="empty-fields-box">
-                      <p>No fields have been demarcated for this farm yet.</p>
+                      <p>{t.noFarmFields}</p>
                       <button
                         className="select-button"
                         onClick={() => setShowFieldModal(true)}
                       >
-                        Add your first field block
+                        {t.addFirstField}
                       </button>
                     </div>
                   ) : (
@@ -410,22 +412,22 @@ export default function Farms() {
 
                             <div className="field-attributes">
                               <div className="attr-item">
-                                <small>Soil Classification</small>
+                                <small>{t.soilClassification}</small>
                                 <span>{field.soilType.replace(/_/g, " ")}</span>
                               </div>
                               <div className="attr-item">
-                                <small>Irrigation System</small>
+                                <small>{t.irrigationSystem}</small>
                                 <span>{field.irrigationMethod || "RAIN_FED"}</span>
                               </div>
                               <div className="attr-item">
-                                <small>Moisture Target</small>
+                                <small>{t.moistureTarget}</small>
                                 <span>
                                   {field.moistureThreshold?.minimum ?? 28}% -{" "}
                                   {field.moistureThreshold?.optimal ?? 55}%
                                 </span>
                               </div>
                               <div className="attr-item">
-                                <small>Planting Date</small>
+                                <small>{t.plantingDate}</small>
                                 <span>{field.plantingDate || "N/A"}</span>
                               </div>
                             </div>
@@ -453,9 +455,9 @@ export default function Farms() {
         <div className="modal-backdrop" onClick={() => setShowFarmModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <header className="modal-header">
-              <h2>Register New Farm</h2>
+              <h2>{t.registerNewFarm}</h2>
               <p className="modal-subtitle">
-                Add an individual or cooperative farming site in Uganda.
+                {t.addFarmDescription}
               </p>
               <button
                 className="modal-close-btn"
@@ -467,7 +469,7 @@ export default function Farms() {
 
             <form onSubmit={handleCreateFarm} className="modal-form">
               <label>
-                Farm Name
+                {t.farmName}
                 <input
                   type="text"
                   placeholder="e.g. Kasangati Agroforestry Plot"
@@ -478,7 +480,7 @@ export default function Farms() {
               </label>
 
               <label>
-                Ugandan District
+                {t.ugandanDistrict}
                 <select
                   value={selectedDistrict}
                   onChange={(e) => handleDistrictChange(e.target.value)}
@@ -493,7 +495,7 @@ export default function Farms() {
 
               <div className="form-row-2">
                 <label>
-                  Sub-County
+                  {t.subCounty}
                   <GooglePlacesLocationPicker
                     district={selectedDistrict}
                     label="sub-county"
@@ -503,7 +505,7 @@ export default function Farms() {
                   />
                 </label>
                 <label>
-                  Parish / Ward
+                  {t.parishWard}
                   <GooglePlacesLocationPicker
                     district={selectedDistrict}
                     label="parish or ward"
@@ -516,7 +518,7 @@ export default function Farms() {
 
               <div className="form-row-2">
                 <label>
-                  Village / LC1 Cell
+                  {t.villageCell}
                   <GooglePlacesLocationPicker
                     district={selectedDistrict}
                     label="village"
@@ -526,21 +528,21 @@ export default function Farms() {
                   />
                 </label>
                 <label>
-                  Topography
+                  {t.topography}
                   <select
                     value={topography}
                     onChange={(e) => setTopography(e.target.value as typeof topography)}
                   >
-                    <option value="FLAT">Flat Terrain</option>
-                    <option value="HILLSIDE">Hillside / Slope</option>
-                    <option value="VALLEY">Valley Bottom</option>
+                    <option value="FLAT">{t.flatTerrain}</option>
+                    <option value="HILLSIDE">{t.hillsideSlope}</option>
+                    <option value="VALLEY">{t.valleyBottom}</option>
                   </select>
                 </label>
               </div>
 
               <div style={{ margin: "10px 0 16px 0", padding: "10px 14px", background: "#f8f9fa", borderRadius: 8, border: "1px solid #e0e0e0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#333" }}>Farm GPS Coordinates</span>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#333" }}>{t.gpsCoordinates}</span>
                   <button
                     type="button"
                     onClick={handleCaptureGps}
@@ -566,7 +568,7 @@ export default function Farms() {
                 )}
                 <div className="form-row-2">
                   <label>
-                    Latitude
+                    {t.latitude}
                     <input
                       type="number"
                       step="any"
@@ -576,7 +578,7 @@ export default function Farms() {
                     />
                   </label>
                   <label>
-                    Longitude
+                    {t.longitude}
                     <input
                       type="number"
                       step="any"
@@ -590,7 +592,7 @@ export default function Farms() {
 
               <div className="form-row-2">
                 <label>
-                  Total Farm Area (Acres)
+                  {t.totalFarmArea}
                   <input
                     type="number"
                     step="0.1"
@@ -601,7 +603,7 @@ export default function Farms() {
                   />
                 </label>
                 <label>
-                  Robusta Coffee Acreage
+                  {t.robustaAcreage}
                   <input
                     type="number"
                     step="0.1"
@@ -615,7 +617,7 @@ export default function Farms() {
 
               <div className="form-row-2">
                 <label>
-                  Approx. Coffee Trees
+                  {t.approxCoffeeTrees}
                   <input
                     type="number"
                     min="1"
@@ -625,7 +627,7 @@ export default function Farms() {
                   />
                 </label>
                 <label>
-                  Coffee Variety
+                  {t.coffeeVariety}
                   <select
                     value={coffeeVariety}
                     onChange={(e) => setCoffeeVariety(e.target.value as typeof coffeeVariety)}
@@ -640,7 +642,7 @@ export default function Farms() {
 
               <div className="form-row-2">
                 <label>
-                  Coffee Stand Age
+                  {t.coffeeStandAge}
                   <select
                     value={coffeeAge}
                     onChange={(e) => setCoffeeAge(e.target.value as typeof coffeeAge)}
@@ -651,7 +653,7 @@ export default function Farms() {
                   </select>
                 </label>
                 <label>
-                  Canopy Shade Cover
+                  {t.canopyShadeCover}
                   <select
                     value={shadePercentage}
                     onChange={(e) => setShadePercentage(e.target.value as typeof shadePercentage)}
@@ -671,12 +673,12 @@ export default function Farms() {
                     checked={isStandalone}
                     onChange={(e) => setIsStandalone(e.target.checked)}
                   />
-                  <span>Standalone Independent Smallholder</span>
+                  <span>{t.standaloneSmallholder}</span>
                 </label>
               </div>
 
               <label>
-                Description / Agronomic Notes
+                {t.descriptionAgronomicNotes}
                 <textarea
                   rows={3}
                   placeholder="Notes on shade trees (Albizia, Ficus, Cordia), soil, slope, water access..."
@@ -691,14 +693,14 @@ export default function Farms() {
                   className="select-button"
                   onClick={() => setShowFarmModal(false)}
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
                   className="primary-button"
                   disabled={saving}
                 >
-                  {saving ? "Registering..." : "Save Farm Record"}
+                  {saving ? t.registering : t.saveFarmRecord}
                 </button>
               </div>
             </form>
@@ -711,7 +713,7 @@ export default function Farms() {
         <div className="modal-backdrop" onClick={() => setShowFieldModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <header className="modal-header">
-              <h2>Add Field / Plot to {selectedFarm.name}</h2>
+              <h2>{t.addFieldPlot} {selectedFarm.name}</h2>
               <p className="modal-subtitle">
                 Demarcate a crop zone to enable targeted AI irrigation and disease models.
               </p>
@@ -810,7 +812,7 @@ export default function Farms() {
                   className="select-button"
                   onClick={() => setShowFieldModal(false)}
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"

@@ -5,6 +5,8 @@ import type { ResearchBctbPrediction, WeatherMetrics } from "../types/bctb";
 import type { Farm } from "../types/farm";
 import BctbAssessmentPage from "../pages/BctbAssessmentPage";
 import Farms from "../pages/Farms";
+import ExtensionFarmDirectoryPage from "../pages/ExtensionFarmDirectoryPage";
+import ExtensionWorkspace, { type ExtensionTab } from "../pages/ExtensionWorkspace";
 import WeatherPage from "../pages/WeatherPage";
 import ExtensionPage from "../pages/ExtensionPage";
 import GovernancePage from "../pages/GovernancePage";
@@ -31,7 +33,8 @@ import { useLanguage, type SupportedLanguage, type TranslationDictionary } from 
 import { auth } from "../firebase/config";
 import { signOut } from "firebase/auth";
 import { useOfflineSync } from "../hooks/useOfflineSync";
-import { getFarms } from "../services/firestoreService";
+import { getDistrictFarms, getFarms } from "../services/firestoreService";
+import { refreshActiveRuleConfiguration } from "../services/bctbRuleConfig";
 import { fetchBctbWeatherMetrics, fetchFarmWeather } from "../services/weatherService";
 import { getLatestTelemetry } from "../services/iotService";
 import { evaluateWeatherAlerts, recordBctbScreeningAlert } from "../services/alertService";
@@ -42,7 +45,7 @@ import type { FollowUpCase } from "../types/followUp";
 
 const ROLE_PAGES: Record<string, AppPage[]> = {
   FARMER: ["dashboard", "bctb-assessment", "help-room", "farms", "coffee-passport", "weather", "recommendations", "activities", "alerts", "subscription", "ai-assistant", "settings"],
-  AGRICULTURAL_OFFICER: ["dashboard", "extension", "help-room", "farms", "map", "weather", "alerts", "subscription", "ai-assistant", "settings"],
+  AGRICULTURAL_OFFICER: ["dashboard", "farms", "extension", "farm-reports", "verification", "inspections", "map", "help-room", "recommendations", "weather", "alerts", "subscription", "ai-assistant", "settings"],
   FARM_MANAGER: ["dashboard", "farms", "coffee-passport", "cooperative-surveillance", "organization-management", "bctb-assessment", "weather", "map", "recommendations", "activities", "alerts", "help-room", "subscription", "ai-assistant", "settings"],
   ORG_ADMIN: ["dashboard", "organization-management", "farms", "coffee-passport", "cooperative-surveillance", "extension", "help-room", "activities", "alerts", "recommendations", "subscription", "settings", "ai-assistant"],
   PLATFORM_ADMIN: ["dashboard", "organization-management", "staff-applications", "admin-accounts", "governance", "extension", "help-room", "farms", "alerts", "subscription", "settings"],
@@ -53,43 +56,49 @@ const ROLE_PAGES: Record<string, AppPage[]> = {
 function getNavLabel(item: AppPage, t: TranslationDictionary): { label: string; icon: string } {
   switch (item) {
     case "bctb-assessment":
-      return { label: t.bctbScreening, icon: "◎" };
+      return { label: t.bctbScreening, icon: "â—Ž" };
     case "help-room":
-      return { label: t.helpRoom, icon: "💬" };
+      return { label: t.helpRoom, icon: "ðŸ’¬" };
     case "farms":
-      return { label: t.myFarms, icon: "🌱" };
+      return { label: t.myFarms, icon: "ðŸŒ±" };
     case "weather":
-      return { label: t.farmWeather, icon: "🌦" };
+      return { label: t.farmWeather, icon: "ðŸŒ¦" };
     case "recommendations":
-      return { label: t.recommendations, icon: "📋" };
+      return { label: t.recommendations, icon: "ðŸ“‹" };
     case "activities":
-      return { label: t.activities, icon: "📔" };
+      return { label: t.activities, icon: "ðŸ“”" };
     case "alerts":
-      return { label: t.alerts, icon: "⚠️" };
+      return { label: t.alerts, icon: "âš ï¸" };
     case "ai-assistant":
-      return { label: t.aiAssistant, icon: "✨" };
+      return { label: t.aiAssistant, icon: "âœ¨" };
     case "settings":
-      return { label: t.settings, icon: "⚙️" };
+      return { label: t.settings, icon: "âš™ï¸" };
     case "extension":
-      return { label: t.extensionTriage, icon: "📋" };
+      return { label: t.extensionTriage, icon: "ðŸ“‹" };
+    case "farm-reports":
+      return { label: t.navFarmReports, icon: "ðŸ“‹" };
+    case "verification":
+      return { label: t.navVerification, icon: "ðŸ”" };
+    case "inspections":
+      return { label: t.navInspections, icon: "âœ…" };
     case "map":
-      return { label: t.map, icon: "🗺" };
+      return { label: t.map, icon: "ðŸ—º" };
     case "governance":
-      return { label: t.governanceRules, icon: "⚖️" };
+      return { label: t.governanceRules, icon: "âš–ï¸" };
     case "staff-applications":
-      return { label: "Officer applications", icon: "✓" };
+      return { label: t.navOfficerApplications, icon: "âœ“" };
     case "admin-accounts":
-      return { label: "Account management", icon: "🔐" };
+      return { label: t.navAccountManagement, icon: "ðŸ”" };
     case "coffee-passport":
-      return { label: "Coffee Passport", icon: "🧾" };
+      return { label: t.navCoffeePassport, icon: "ðŸ§¾" };
     case "cooperative-surveillance":
-      return { label: "Cooperative surveillance", icon: "📊" };
+      return { label: t.navCooperative, icon: "ðŸ“Š" };
     case "subscription":
-      return { label: "Plans & Pricing", icon: "💎" };
+      return { label: t.navPlans, icon: "ðŸ’Ž" };
     case "organization-management":
-      return { label: "Cooperative Portal", icon: "🏢" };
+      return { label: t.navOrgPortal, icon: "ðŸ¢" };
     default:
-      return { label: item, icon: "•" };
+      return { label: item, icon: "â€¢" };
   }
 }
 
@@ -159,14 +168,24 @@ export default function EarlyWarningDashboard({
 
   const pageNavInfo = getNavLabel(page, t);
   const roleHubTitles: Record<string, string> = {
-    FARMER: "Farm overview",
-    AGRICULTURAL_OFFICER: "Officer hub",
-    FARM_MANAGER: "Farm manager hub",
-    ORG_ADMIN: "Cooperative hub",
-    PLATFORM_ADMIN: "Administrator hub",
-    VIEWER: "Research overview",
+    FARMER: t.overview,
+    AGRICULTURAL_OFFICER: t.extensionDeskKicker,
+    FARM_MANAGER: t.overview,
+    ORG_ADMIN: t.overview,
+    PLATFORM_ADMIN: t.overview,
+    VIEWER: t.overview,
   };
-  const pageTitle = page === "dashboard" ? roleHubTitles[currentRole] || "Overview" : pageNavInfo.label;
+  const officerPageLabels: Partial<Record<AppPage, string>> = {
+    farms: t.tabFarmersFarms,
+    extension: t.extensionPortal,
+    "farm-reports": t.tabFarmReports,
+    verification: t.tabVerification,
+    inspections: t.tabInspections,
+    map: t.map,
+    recommendations: t.tabRecommendations,
+    settings: t.tabMyProfile,
+  };
+  const pageTitle = page === "dashboard" ? roleHubTitles[currentRole] || "Overview" : currentRole === "AGRICULTURAL_OFFICER" ? officerPageLabels[page] || pageNavInfo.label : pageNavInfo.label;
   const chatContext: AgriSenseAiContext & Record<string, unknown> = {
     userUid: user?.uid,
     role: currentRole,
@@ -175,6 +194,12 @@ export default function EarlyWarningDashboard({
     page,
     farmerName,
   };
+
+  useEffect(() => {
+    void refreshActiveRuleConfiguration().catch((error: unknown) => {
+      console.warn("Could not refresh the shared BCTB rule configuration.", error);
+    });
+  }, [user?.uid]);
 
   if (profile && profile.status !== "ACTIVE") {
     return <AccountReviewScreen name={farmerName} status={profile.status} applicationStatus={profile.applicationStatus} onSignOut={handleSignOut} />;
@@ -199,9 +224,9 @@ export default function EarlyWarningDashboard({
 
       {!pages.includes(page) ? (
         <section className="panel role-access-denied">
-          <h2>This workspace page is not assigned to your role level.</h2>
+          <h2>{t.roleAccessDenied}</h2>
           <button className="primary-button" onClick={() => onNavigate("dashboard")}>
-            Return to your dashboard
+            {t.returnDashboard}
           </button>
         </section>
       ) : null}
@@ -227,14 +252,17 @@ export default function EarlyWarningDashboard({
       {pages.includes(page) && page === "subscription" && <SubscriptionPlansPage />}
       {pages.includes(page) && page === "organization-management" && <OrganizationManagementPage />}
       {pages.includes(page) && page === "bctb-assessment" && <BctbAssessmentPage onResult={setLatestResearchPrediction} />}
-      {pages.includes(page) && page === "farms" && <Farms />}
+      {pages.includes(page) && page === "farms" && (currentRole === "AGRICULTURAL_OFFICER" ? <ExtensionFarmDirectoryPage onNavigate={onNavigate} /> : <Farms />)}
       {pages.includes(page) && page === "weather" && <WeatherPage />}
       {pages.includes(page) && page === "map" && <MapPage onNavigate={onNavigate} />}
       {pages.includes(page) && page === "recommendations" && <RecommendationsPage onNavigate={onNavigate} />}
       {pages.includes(page) && page === "activities" && <ActivitiesPage onNavigate={onNavigate} />}
       {pages.includes(page) && page === "alerts" && <AlertsPage />}
       {pages.includes(page) && page === "settings" && <SettingsPage />}
-      {pages.includes(page) && page === "extension" && <ExtensionPage />}
+      {pages.includes(page) && page === "extension" && (currentRole === "AGRICULTURAL_OFFICER" ? <ExtensionWorkspace initialTab="overview" onNavigate={onNavigate} /> : <ExtensionPage />)}
+      {currentRole === "AGRICULTURAL_OFFICER" && pages.includes(page) && ["farm-reports", "verification", "inspections"].includes(page) && (
+        <ExtensionWorkspace initialTab={page as ExtensionTab} onNavigate={onNavigate} />
+      )}
       {pages.includes(page) && page === "governance" && <GovernancePage />}
       {pages.includes(page) && page === "staff-applications" && <StaffApplicationsPage />}
       {pages.includes(page) && page === "admin-accounts" && <AdminAccountManagementPage />}
@@ -477,6 +505,7 @@ function RoleHome({
   district: string;
   subCounty: string;
 }) {
+  const { language } = useLanguage();
   const [farms, setFarms] = useState<Farm[]>([]);
   const [weather, setWeather] = useState<WeatherMetrics | null>(null);
   const [weatherError, setWeatherError] = useState(false);
@@ -529,15 +558,9 @@ function RoleHome({
     const journalEntries = userUid ? getResearchScreeningJournal(userUid) : [];
     const savedEntry = journalEntries.find((entry) => entry.prediction) ?? null;
     const sessionPrediction = latestResearchPrediction;
-    const riskLabel = sessionPrediction
-      ? `${sessionPrediction.predicted_risk.charAt(0)}${sessionPrediction.predicted_risk.slice(1).toLowerCase()} risk`
-      : "";
     const riskProbability = sessionPrediction
       ? Math.round(sessionPrediction.class_probabilities[sessionPrediction.predicted_risk] * 100)
       : 0;
-    const savedRiskLabel = savedEntry?.prediction
-      ? `${savedEntry.prediction.predicted_risk.charAt(0)}${savedEntry.prediction.predicted_risk.slice(1).toLowerCase()} risk`
-      : "";
     const savedDate = savedEntry
       ? new Date(savedEntry.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
       : "";
@@ -549,16 +572,13 @@ function RoleHome({
       <div className="role-dashboard farmer-view">
         <section className="farmer-hero">
           <div className="farmer-hero-copy">
-            <span className="section-kicker">Robusta coffee farmer hub</span>
-            <h2>Welcome back, {firstName}</h2>
-            <p>
-              Check your coffee trees for twig borer, get clear next steps, and keep every farm
-              record in one place.
-            </p>
+            <span className="section-kicker">{t.farmerHubKicker}</span>
+            <h2>{t.welcomeBack}, {firstName}</h2>
+            <p>{t.farmerHeroDesc}</p>
             <div className="farmer-hero-actions">
               <button className="primary-button btn-lg" type="button" onClick={() => onNavigate("bctb-assessment")}>
                 {t.startScreeningBtn}
-                <span aria-hidden="true">→</span>
+                <span aria-hidden="true">â†’</span>
               </button>
               <button className="outline-button btn-lg" type="button" onClick={() => onNavigate("help-room")}>
                 {t.askAnOfficer}
@@ -570,128 +590,134 @@ function RoleHome({
                   <path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z" />
                   <circle cx="12" cy="10" r="2.5" />
                 </svg>
-                {district} District{subCounty ? ` · ${subCounty} Sub-County` : ""}
+                {district} {t.districtWord}{subCounty ? ` Â· ${subCounty} ${t.subCountyWord}` : ""}
               </span>
               <span>
-                {farms.length} {farms.length === 1 ? "farm" : "farms"} registered
+                {farms.length} {farms.length === 1 ? t.farmRegisteredCount : t.farmsRegisteredCount}
               </span>
             </div>
           </div>
 
-          <aside className="today-card" aria-label="Today on your farm">
+          <aside className="today-card" aria-label={t.todayOnYourFarm}>
             <div className="today-card-head">
-              <span className="section-kicker">Today on your farm</span>
-              <span className="today-weather-icon" aria-hidden="true">☀</span>
+              <span className="section-kicker">{t.todayOnYourFarm}</span>
+              <span className="today-weather-icon" aria-hidden="true">â˜€</span>
             </div>
             {weather && weather.granularity !== "UNAVAILABLE" ? (
               <>
-                <strong className="today-temp">{Math.round(weather.tempAvg30dC)}°C</strong>
-                <p className="today-temp-label">average temperature, last 30 days</p>
+                <strong className="today-temp">{Math.round(weather.tempAvg30dC)}Â°C</strong>
+                <p className="today-temp-label">{t.avgTemp30dLabel}</p>
                 <dl className="today-stats">
                   <div>
-                    <dt>Rain, 30 days</dt>
+                    <dt>{t.rain30dLabel}</dt>
                     <dd>{Math.round(weather.cumulativeRainfall30dMm)} mm</dd>
                   </div>
                   <div>
-                    <dt>Dry spell</dt>
+                    <dt>{t.drySpellsLabel}</dt>
                     <dd className={weather.consecutiveDrySpellDays >= 14 ? "is-warning" : ""}>
-                      {weather.consecutiveDrySpellDays} days
+                      {weather.consecutiveDrySpellDays} {language === "lg" ? "ennaku" : language === "sw" ? "siku" : language === "nyn" ? "ebiro" : "days"}
                     </dd>
                   </div>
                 </dl>
               </>
             ) : weatherError || (weather && weather.granularity === "UNAVAILABLE") ? (
-              <p className="today-loading">Weather is unavailable right now. Try again later.</p>
+              <p className="today-loading">{t.stateNoData}</p>
             ) : farms.length === 0 ? (
               <p className="today-loading">
-                Add your first farm to see local weather.{" "}
+                {language === "lg" ? "Yongerako ennimiro yo esooka okulaba embeera y'obudde. " : language === "sw" ? "Ongeza shamba lako la kwanza kuona hali ya hewa. " : language === "nyn" ? "Taaho omusiri gwawe ogw'okubanza kureeba obwire. " : "Add your first farm to see local weather. "}
                 <button className="text-button" type="button" onClick={() => onNavigate("farms")}>
-                  Add a farm <span aria-hidden="true">→</span>
+                  {t.myFarms} <span aria-hidden="true">â†’</span>
                 </button>
               </p>
             ) : (
-              <p className="today-loading">Loading your local weather…</p>
+              <p className="today-loading">{language === "lg" ? "Tutikka embeera y'obudde..." : language === "sw" ? "Inapakia hali ya hewa..." : language === "nyn" ? "Nikitwara obwire..." : "Loading your local weatherâ€¦"}</p>
             )}
             <button className="text-button today-link" type="button" onClick={() => onNavigate("weather")}>
-              See the full forecast <span aria-hidden="true">→</span>
+              {t.farmWeather} <span aria-hidden="true">â†’</span>
             </button>
           </aside>
         </section>
 
         <section className="kpi-grid" aria-label="Farm conditions">
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--blue" aria-hidden="true">💧</span>
+            <span className="kpi-icon kpi-icon--blue" aria-hidden="true">ðŸ’§</span>
             <div className="kpi-copy">
-              <span>Soil moisture</span>
-              <strong>{telemetry ? `${Math.round(telemetry.soilMoisture)}%` : "—"}</strong>
-              <small className={`kpi-state ${moistureState === "Adequate" ? "is-good" : "is-warn"}`}>{moistureState}</small>
+              <span>{t.soilMoistureLabel}</span>
+              <strong>{telemetry ? `${Math.round(telemetry.soilMoisture)}%` : "â€”"}</strong>
+              <small className={`kpi-state ${moistureState === "Adequate" ? "is-good" : "is-warn"}`}>
+                {moistureState === "Adequate" ? t.stateAdequate : moistureState === "Dry" ? t.stateDry : moistureState === "Wet" ? t.stateWet : t.stateNoData}
+              </small>
             </div>
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--amber" aria-hidden="true">🌡</span>
+            <span className="kpi-icon kpi-icon--amber" aria-hidden="true">ðŸŒ¡</span>
             <div className="kpi-copy">
-              <span>Temperature</span>
-              <strong>{telemetry ? `${telemetry.ambientTemperature.toFixed(1)}°C` : "—"}</strong>
-              <small className={`kpi-state ${tempState === "Comfortable" ? "is-good" : "is-warn"}`}>{tempState}</small>
+              <span>{t.temperatureLabel}</span>
+              <strong>{telemetry ? `${telemetry.ambientTemperature.toFixed(1)}Â°C` : "â€”"}</strong>
+              <small className={`kpi-state ${tempState === "Comfortable" ? "is-good" : "is-warn"}`}>
+                {tempState === "Comfortable" ? t.stateComfortable : tempState === "Check" ? t.stateCheck : t.stateNoData}
+              </small>
             </div>
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--green" aria-hidden="true">💨</span>
+            <span className="kpi-icon kpi-icon--green" aria-hidden="true">ðŸ’¨</span>
             <div className="kpi-copy">
-              <span>Humidity</span>
-              <strong>{telemetry ? `${Math.round(telemetry.relativeHumidity)}%` : "—"}</strong>
-              <small className={`kpi-state ${humidityState === "Healthy" ? "is-good" : "is-warn"}`}>{humidityState}</small>
+              <span>{t.humidityLabel}</span>
+              <strong>{telemetry ? `${Math.round(telemetry.relativeHumidity)}%` : "â€”"}</strong>
+              <small className={`kpi-state ${humidityState === "Healthy" ? "is-good" : "is-warn"}`}>
+                {humidityState === "Healthy" ? t.stateHealthy : humidityState === "Check" ? t.stateCheck : t.stateNoData}
+              </small>
             </div>
           </article>
 
           <article className="kpi-card">
-            <span className="kpi-icon kpi-icon--clay" aria-hidden="true">🌧</span>
+            <span className="kpi-icon kpi-icon--clay" aria-hidden="true">ðŸŒ§</span>
             <div className="kpi-copy">
-              <span>Rain, 30 days</span>
-              <strong>{weather ? `${Math.round(weather.cumulativeRainfall30dMm)} mm` : "—"}</strong>
-              <small className="kpi-state">{weather ? "Regional weather" : "No data"}</small>
+              <span>{t.rain30dKpi}</span>
+              <strong>{weather ? `${Math.round(weather.cumulativeRainfall30dMm)} mm` : "â€”"}</strong>
+              <small className="kpi-state">{weather ? t.regionalWeatherLabel : t.stateNoData}</small>
             </div>
           </article>
         </section>
-        <p className="kpi-note">Demo sensor values until you connect your field device.</p>
+        <p className="kpi-note">{t.demoSensorNote}</p>
 
-        <section className="quick-grid" aria-label="Quick actions">
+        <section className="quick-grid" aria-label={t.quickActions}>
           <button className="quick-card" type="button" onClick={() => onNavigate("bctb-assessment")}>
-            <span className="quick-icon quick-icon--green" aria-hidden="true">◎</span>
+            <span className="quick-icon quick-icon--green" aria-hidden="true">â—Ž</span>
             <span className="quick-copy">
-              <strong>Check my coffee</strong>
-              <small>Seven quick questions about your twigs</small>
+              <strong>{t.quickCheckCoffeeTitle}</strong>
+              <small>{t.quickCheckCoffeeDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">→</span>
+            <span className="quick-arrow" aria-hidden="true">â†’</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("help-room")}>
-            <span className="quick-icon quick-icon--amber" aria-hidden="true">💬</span>
+            <span className="quick-icon quick-icon--amber" aria-hidden="true">ðŸ’¬</span>
             <span className="quick-copy">
-              <strong>Ask an officer</strong>
-              <small>Get advice from an extension officer</small>
+              <strong>{t.quickAskOfficerTitle}</strong>
+              <small>{t.quickAskOfficerDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">→</span>
+            <span className="quick-arrow" aria-hidden="true">â†’</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("farms")}>
-            <span className="quick-icon quick-icon--clay" aria-hidden="true">🌱</span>
+            <span className="quick-icon quick-icon--clay" aria-hidden="true">ðŸŒ±</span>
             <span className="quick-copy">
               <strong>{t.myFarms}</strong>
-              <small>{farms.length} registered on your account</small>
+              <small>{farms.length} {t.quickMyFarmsDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">→</span>
+            <span className="quick-arrow" aria-hidden="true">â†’</span>
           </button>
 
           <button className="quick-card" type="button" onClick={() => onNavigate("weather")}>
-            <span className="quick-icon quick-icon--blue" aria-hidden="true">☀</span>
+            <span className="quick-icon quick-icon--blue" aria-hidden="true">â˜€</span>
             <span className="quick-copy">
               <strong>{t.farmWeather}</strong>
-              <small>Rain and dry-spell outlook</small>
+              <small>{t.quickFarmWeatherDesc}</small>
             </span>
-            <span className="quick-arrow" aria-hidden="true">→</span>
+            <span className="quick-arrow" aria-hidden="true">â†’</span>
           </button>
         </section>
 
@@ -700,54 +726,52 @@ function RoleHome({
             <div className="panel-header">
               <div>
                 <span className="section-kicker">{t.currentScreening}</span>
-                <h3>Your latest screening</h3>
+                <h3>{t.yourLatestScreening}</h3>
               </div>
               {sessionPrediction ? (
                 <span className={`risk-badge-sm ${sessionPrediction.predicted_risk.toLowerCase()}`}>
-                  {riskProbability}% model score
+                  {riskProbability}% {t.modelScoreText}
                 </span>
               ) : savedEntry ? (
-                <span className={`risk-badge-sm ${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>Saved result</span>
+                <span className={`risk-badge-sm ${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>{t.savedResultText}</span>
               ) : null}
             </div>
 
             {sessionPrediction ? (
               <>
                 <div className="farmer-latest-riskline">
-                  <strong className={`risk-text-${sessionPrediction.predicted_risk.toLowerCase()}`}>{riskLabel}</strong>
-                  <span>Research model estimate</span>
+                  <strong className={`risk-text-${sessionPrediction.predicted_risk.toLowerCase()}`}>
+                    {sessionPrediction.predicted_risk === "HIGH" ? t.riskHighHeading : sessionPrediction.predicted_risk === "MODERATE" ? t.riskModerateHeading : t.riskLowHeading}
+                  </strong>
+                  <span>{t.researchModelEstimate}</span>
                 </div>
-                <p>
-                  This is an early warning based on your answers, not a diagnosis. Ask your
-                  extension officer to confirm what is happening in your field.
-                </p>
+                <p>{t.screeningWarningText}</p>
                 {sessionPrediction.predicted_risk !== "LOW" && (
                   <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>
-                    Ask an officer to review this
+                    {t.askOfficerReviewBtn}
                   </button>
                 )}
               </>
             ) : savedEntry ? (
               <>
                 <div className="farmer-latest-riskline">
-                  <strong className={`risk-text-${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>{savedRiskLabel}</strong>
-                  <span>Saved {savedDate} · score {savedScore}/100</span>
+                  <strong className={`risk-text-${savedEntry.prediction?.predicted_risk.toLowerCase() ?? "low"}`}>
+                    {savedEntry.prediction?.predicted_risk === "HIGH" ? t.riskHighHeading : savedEntry.prediction?.predicted_risk === "MODERATE" ? t.riskModerateHeading : t.riskLowHeading}
+                  </strong>
+                  <span>{t.savedResultText} {savedDate} Â· {savedScore}/100</span>
                 </div>
-                <p>
-                  This is an early warning based on your answers, not a diagnosis. Ask your
-                  extension officer to confirm what is happening in your field.
-                </p>
+                <p>{t.screeningWarningText}</p>
                 {savedEntry.prediction && savedEntry.prediction.predicted_risk !== "LOW" && (
                   <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>
-                    Ask an officer to review this
+                    {t.askOfficerReviewBtn}
                   </button>
                 )}
               </>
             ) : (
               <div className="farmer-empty">
-                <span className="farmer-empty-icon" aria-hidden="true">◎</span>
-                <strong>No screening yet</strong>
-                <p>Start a two-minute check to see your risk level and what to do next.</p>
+                <span className="farmer-empty-icon" aria-hidden="true">â—Ž</span>
+                <strong>{t.noScreeningTitle}</strong>
+                <p>{t.noScreeningDesc}</p>
               </div>
             )}
 
@@ -760,51 +784,48 @@ function RoleHome({
                 onClick={() => onNavigate("bctb-assessment")}
               >
                 {sessionPrediction || savedEntry ? t.updateAssessmentBtn : t.startScreeningBtn}
-                <span aria-hidden="true">→</span>
+                <span aria-hidden="true">â†’</span>
               </button>
             </div>
 
-            <p className="fine-print">
-              Screening is an early warning, not a diagnosis. Confirm with your sub-county
-              agricultural extension officer.
-            </p>
+            <p className="fine-print">{t.finePrintWarning}</p>
           </section>
 
           <section className="panel farmer-checklist">
-            <span className="section-kicker">Cultural management standard</span>
-            <h3>NARO BCTB sanitary checklist</h3>
+            <span className="section-kicker">{t.culturalStandardKicker}</span>
+            <h3>{t.naroChecklistTitle}</h3>
             <ul className="checklist">
               <li>
-                <span className="check" aria-hidden="true">✓</span>
+                <span className="check" aria-hidden="true">âœ“</span>
                 <div>
-                  <strong>Prune</strong>
-                  <p>Clip infested twigs 5 cm (2 inches) below the lowest beetle hole.</p>
+                  <strong>{t.pruneTitle}</strong>
+                  <p>{t.pruneDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">✓</span>
+                <span className="check" aria-hidden="true">âœ“</span>
                 <div>
-                  <strong>Burn</strong>
-                  <p>Collect clipped twigs in sacks and burn them off the farm.</p>
+                  <strong>{t.burnTitle}</strong>
+                  <p>{t.burnDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">✓</span>
+                <span className="check" aria-hidden="true">âœ“</span>
                 <div>
-                  <strong>Desucker</strong>
-                  <p>Remove excess water suckers growing from the stem base.</p>
+                  <strong>{t.desuckerTitle}</strong>
+                  <p>{t.desuckerDesc}</p>
                 </div>
               </li>
               <li>
-                <span className="check" aria-hidden="true">✓</span>
+                <span className="check" aria-hidden="true">âœ“</span>
                 <div>
-                  <strong>Regulate shade</strong>
-                  <p>Keep canopy at 30–40% filtered light for a healthy microclimate.</p>
+                  <strong>{t.shadeTitle}</strong>
+                  <p>{t.shadeDesc}</p>
                 </div>
               </li>
             </ul>
             <button className="outline-button" type="button" onClick={() => onNavigate("activities")}>
-              Record this work in my journal
+              {t.recordJournalBtn}
             </button>
           </section>
         </div>
@@ -850,9 +871,9 @@ function RoleHome({
             onClick={() => onNavigate("governance")}
           >
             <span className="section-kicker">System Governance</span>
-            <h3>⚖️ Rules & Model Registry</h3>
+            <h3>âš–ï¸ Rules & Model Registry</h3>
             <p>Audit expert rules v1.0.0, calibrate feature weights, and check safety guardrails.</p>
-            <strong>Open Governance <span>→</span></strong>
+            <strong>Open Governance <span>â†’</span></strong>
           </button>
 
           <button
@@ -861,9 +882,9 @@ function RoleHome({
             onClick={() => onNavigate("extension")}
           >
             <span className="section-kicker">Operations</span>
-            <h3>📋 Extension Operations</h3>
+            <h3>ðŸ“‹ Extension Operations</h3>
             <p>Review sub-county referral resolution rates and officer workload.</p>
-            <strong>Open Casework <span>→</span></strong>
+            <strong>Open Casework <span>â†’</span></strong>
           </button>
 
           <button
@@ -872,9 +893,9 @@ function RoleHome({
             onClick={() => onNavigate("help-room")}
           >
             <span className="section-kicker">Community Moderation</span>
-            <h3>💬 Help Room Supervision</h3>
+            <h3>ðŸ’¬ Help Room Supervision</h3>
             <p>Ensure farmer inquiries receive compliant, non-chemical advisory responses.</p>
-            <strong>Supervise Help Room <span>→</span></strong>
+            <strong>Supervise Help Room <span>â†’</span></strong>
           </button>
         </section>
 
@@ -914,30 +935,30 @@ function RoleHome({
       <section className="role-home-grid">
         <button className="role-home-card panel" type="button" onClick={() => onNavigate("farms")}>
           <span className="section-kicker">Portfolio</span>
-          <h3>🌱 {t.myFarms}</h3>
+          <h3>ðŸŒ± {t.myFarms}</h3>
           <p>Review all managed coffee plots, acreage, and varieties.</p>
-          <strong>{t.viewFarms} <span>→</span></strong>
+          <strong>{t.viewFarms} <span>â†’</span></strong>
         </button>
 
         <button className="role-home-card panel" type="button" onClick={() => onNavigate("bctb-assessment")}>
           <span className="section-kicker">Screening</span>
-          <h3>◎ {t.bctbScreening}</h3>
+          <h3>â—Ž {t.bctbScreening}</h3>
           <p>Screen coffee blocks and assess twig dieback incidence.</p>
-          <strong>{t.startScreeningBtn} <span>→</span></strong>
+          <strong>{t.startScreeningBtn} <span>â†’</span></strong>
         </button>
 
         <button className="role-home-card panel" type="button" onClick={() => onNavigate("help-room")}>
           <span className="section-kicker">Community</span>
-          <h3>💬 {t.helpRoom}</h3>
+          <h3>ðŸ’¬ {t.helpRoom}</h3>
           <p>Answer questions from member farmers and coordinate extension support.</p>
-          <strong>Open Help Room <span>→</span></strong>
+          <strong>Open Help Room <span>â†’</span></strong>
         </button>
 
         <button className="role-home-card panel" type="button" onClick={() => onNavigate("activities")}>
           <span className="section-kicker">Journal</span>
-          <h3>📔 {t.activities}</h3>
+          <h3>ðŸ“” {t.activities}</h3>
           <p>Track sanitary pruning, desuckering, and shade regulation logs.</p>
-          <strong>Open Journal <span>→</span></strong>
+          <strong>Open Journal <span>â†’</span></strong>
         </button>
       </section>
     </div>
@@ -959,7 +980,7 @@ function AccountReviewScreen({
   return (
     <main className="account-review-screen">
       <section className="panel account-review-card">
-        <span className={`account-review-icon ${rejected ? "rejected" : ""}`} aria-hidden="true">{rejected ? "!" : "…"}</span>
+        <span className={`account-review-icon ${rejected ? "rejected" : ""}`} aria-hidden="true">{rejected ? "!" : "â€¦"}</span>
         <span className="section-kicker">AGRISENSE ACCOUNT</span>
         <h1>{rejected ? "Officer application not approved" : status === "PENDING" ? "Application under review" : "Account access paused"}</h1>
         <p>{rejected
@@ -967,7 +988,7 @@ function AccountReviewScreen({
           : status === "PENDING"
             ? `Thanks, ${name.split(" ")[0]}. An administrator needs to verify your organization, staff ID, and assigned area before officer tools are enabled.`
             : "An administrator has deactivated this account. Contact your AgriSense administrator for help."}</p>
-        {status === "PENDING" && <div className="account-review-steps"><span>✓ Application received</span><span>2. Administrator review</span><span>3. Officer workspace activated</span></div>}
+        {status === "PENDING" && <div className="account-review-steps"><span>âœ“ Application received</span><span>2. Administrator review</span><span>3. Officer workspace activated</span></div>}
         <button type="button" className="outline-button" onClick={onSignOut}>Sign out</button>
       </section>
     </main>
@@ -985,8 +1006,10 @@ function OfficerHome({
   subCounty: string;
   onNavigate: (page: AppPage) => void;
 }) {
+  const { t } = useLanguage();
   const [cases, setCases] = useState<FollowUpCase[]>([]);
   const [casesUnavailable, setCasesUnavailable] = useState(false);
+  const [assignedFarmers, setAssignedFarmers] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -1001,9 +1024,18 @@ function OfficerHome({
     return () => { active = false; };
   }, [district]);
 
+  useEffect(() => {
+    let active = true;
+    getDistrictFarms(district).then((farms) => {
+      if (active) setAssignedFarmers(new Set(farms.map((farm) => farm.farmerId)).size);
+    }).catch((error: unknown) => console.warn("Could not load assigned farmer count.", error));
+    return () => { active = false; };
+  }, [district]);
+
   const highRiskCount = cases.filter((item) => item.riskLevel === "HIGH" && item.status !== "resolved").length;
   const needsReviewCount = cases.filter((item) => item.status === "new").length;
   const completedCount = cases.filter((item) => item.status === "visited" || item.status === "resolved").length;
+  const verifiedCount = cases.filter((item) => item.verifiedObservation === "confirmed_bctb" || item.verifiedObservation === "not_confirmed" || item.verifiedObservation === "other_pest_or_condition").length;
   const recentCases = [...cases]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 4);
@@ -1012,34 +1044,34 @@ function OfficerHome({
     <div className="role-dashboard officer-view">
       <section className="officer-hero panel">
         <div className="officer-hero-copy">
-          <span className="section-kicker">AGRICULTURAL EXTENSION · {district.toUpperCase()} DISTRICT</span>
-          <h2>Good morning, {farmerName.split(" ")[0]}</h2>
-          <p>Your extension desk for farmer questions, BCTB referrals, and field follow-up in your assigned area.</p>
+          <span className="section-kicker">{t.extensionDeskKicker} {district.toUpperCase()} {t.districtWord}</span>
+          <h2>{t.goodMorningOfficer} {farmerName.split(" ")[0]}</h2>
+          <p>{t.officerHeroDesc}</p>
           <div className="officer-hero-actions">
-            <button className="primary-button" type="button" onClick={() => onNavigate("extension")}>Open casework queue <span aria-hidden="true">→</span></button>
-            <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>Answer farmer questions</button>
+            <button className="primary-button" type="button" onClick={() => onNavigate("extension")}>{t.openCaseworkQueue}</button>
+            <button className="outline-button" type="button" onClick={() => onNavigate("help-room")}>{t.answerFarmerQuestions}</button>
           </div>
         </div>
         <div className="officer-location-card">
-          <span aria-hidden="true">⌖</span>
-          <small>YOUR ASSIGNED AREA</small>
-          <strong>{district} District</strong>
-          {subCounty && <span>{subCounty} Sub-County</span>}
+          <span aria-hidden="true">âŒ–</span>
+          <small>{t.assignedAreaCard}</small>
+          <strong>{district} {t.districtWord}</strong>
+          {subCounty && <span>{subCounty} {t.subCountyWord}</span>}
         </div>
       </section>
 
       <section className="officer-metrics" aria-label="Extension case summary">
-        <article className="panel officer-metric"><span>Open referrals</span><strong>{cases.filter((item) => item.status !== "resolved").length}</strong><small>In your district queue</small></article>
-        <article className="panel officer-metric attention"><span>High-risk cases</span><strong>{highRiskCount}</strong><small>Prioritize field verification</small></article>
-        <article className="panel officer-metric"><span>Awaiting review</span><strong>{needsReviewCount}</strong><small>New farmer submissions</small></article>
-        <article className="panel officer-metric"><span>Visits completed</span><strong>{completedCount}</strong><small>Visited or resolved</small></article>
+        <article className="panel officer-metric"><span>{t.assignedFarmersMetric}</span><strong>{assignedFarmers}</strong><small>{t.assignedFarmersHelp}</small></article>
+        <article className="panel officer-metric attention"><span>{t.highRiskCasesMetric}</span><strong>{highRiskCount}</strong><small>{t.highRiskCasesHelp}</small></article>
+        <article className="panel officer-metric"><span>{t.reportsToReviewMetric}</span><strong>{needsReviewCount}</strong><small>{t.reportsToReviewHelp}</small></article>
+        <article className="panel officer-metric"><span>{t.verifiedReportsMetric}</span><strong>{verifiedCount}</strong><small>{t.verifiedReportsHelp} Â· {completedCount} visits</small></article>
       </section>
 
       <div className="officer-work-grid">
         <section className="panel officer-queue-panel">
           <header className="officer-section-heading">
-            <div><span className="section-kicker">DISTRICT CASEWORK</span><h3>Recent referrals</h3></div>
-            <button type="button" className="text-button" onClick={() => onNavigate("extension")}>View all <span aria-hidden="true">→</span></button>
+            <div><span className="section-kicker">{t.districtCaseworkKicker}</span><h3>{t.recentReferralsTitle}</h3></div>
+            <button type="button" className="text-button" onClick={() => onNavigate("extension")}>{t.viewAllCasework}</button>
           </header>
           {casesUnavailable && <p className="form-error" role="alert">Live referrals are unavailable. Check your connection before acting on casework.</p>}
           {recentCases.length ? <div className="officer-case-list">{recentCases.map((item) => (
@@ -1053,17 +1085,17 @@ function OfficerHome({
         </section>
 
         <section className="panel officer-tools-panel">
-          <span className="section-kicker">FIELD TOOLS</span>
-          <h3>Plan your next response</h3>
-          <button type="button" className="officer-tool-link" onClick={() => onNavigate("help-room")}><span className="officer-tool-icon chat">☏</span><span><strong>Farmer Help Room</strong><small>Answer community questions and share guidance.</small></span><b aria-hidden="true">→</b></button>
-          <button type="button" className="officer-tool-link" onClick={() => onNavigate("map")}><span className="officer-tool-icon map">⌖</span><span><strong>Farm & risk map</strong><small>Review farm locations and regional patterns.</small></span><b aria-hidden="true">→</b></button>
-          <button type="button" className="officer-tool-link" onClick={() => onNavigate("weather")}><span className="officer-tool-icon weather">☼</span><span><strong>District weather</strong><small>Check rainfall and dry-spell conditions.</small></span><b aria-hidden="true">→</b></button>
+          <span className="section-kicker">{t.fieldToolsKicker}</span>
+          <h3>{t.planNextResponseTitle}</h3>
+          <button type="button" className="officer-tool-link" onClick={() => onNavigate("help-room")}><span className="officer-tool-icon chat">â˜</span><span><strong>{t.helpRoom}</strong><small>{t.helpRoomSubheading}</small></span><b aria-hidden="true">â†’</b></button>
+          <button type="button" className="officer-tool-link" onClick={() => onNavigate("map")}><span className="officer-tool-icon map">âŒ–</span><span><strong>{t.map}</strong><small>{t.farmsAndFields}</small></span><b aria-hidden="true">â†’</b></button>
+          <button type="button" className="officer-tool-link" onClick={() => onNavigate("weather")}><span className="officer-tool-icon weather">â˜¼</span><span><strong>{t.farmWeather}</strong><small>{t.weatherIntel}</small></span><b aria-hidden="true">â†’</b></button>
         </section>
       </div>
 
       <section className="officer-protocol panel">
-        <span className="section-kicker">FIELD VISIT REMINDER</span>
-        <p>Screening results guide follow-up; confirm BCTB on-farm by inspecting affected twigs. Recommend approved cultural practices and avoid unregistered chemical treatments.</p>
+        <span className="section-kicker">{t.fieldVisitReminderKicker}</span>
+        <p>{t.fieldVisitReminderText}</p>
       </section>
     </div>
   );
@@ -1105,19 +1137,29 @@ function Shell({
           <span className="brand-mark">A</span>
           <div>
             <span>AgriSense</span>
-            <small className="brand-country">Robusta Coffee · Uganda</small>
+            <small className="brand-country">Robusta Coffee Â· Uganda</small>
           </div>
         </div>
 
-        <p className="workspace-label">{currentRole} workspace</p>
+        <p className="workspace-label">{currentRole === "FARMER" ? t.roleFarmerText : currentRole === "AGRICULTURAL_OFFICER" ? t.roleOfficerText : currentRole} {t.workspaceLabel}</p>
 
         <nav className="nav-list" aria-label="AgriSense navigation">
-          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="⌂">
+          <NavButton active={page === "dashboard"} onClick={() => onNavigate("dashboard")} icon="âŒ‚">
             {t.overview}
           </NavButton>
 
           {navItems.map((item) => {
             const navInfo = getNavLabel(item, t);
+            const officerNavLabel: Partial<Record<AppPage, string>> = {
+              farms: t.tabFarmersFarms,
+              extension: t.extensionPortal,
+              "farm-reports": t.tabFarmReports,
+              verification: t.tabVerification,
+              inspections: t.tabInspections,
+              map: t.map,
+              recommendations: t.tabRecommendations,
+              settings: t.tabMyProfile,
+            };
             return (
               <NavButton
                 key={item}
@@ -1125,7 +1167,7 @@ function Shell({
                 onClick={() => onNavigate(item)}
                 icon={navInfo.icon}
               >
-                {navInfo.label}
+                {currentRole === "AGRICULTURAL_OFFICER" ? officerNavLabel[item] || navInfo.label : navInfo.label}
               </NavButton>
             );
           })}
@@ -1146,7 +1188,7 @@ function Shell({
       <main className="main-content" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div>
-            <p className="eyebrow">Explainable decision support · Robusta coffee</p>
+            <p className="eyebrow">{t.eyebrowText}</p>
             <h1>{title}</h1>
           </div>
 
@@ -1175,21 +1217,21 @@ function Shell({
                 <span className="dot" />
                 {syncStatus.pendingCount > 0 ? (
                   <button type="button" className="sync-pill-action" onClick={() => void syncStatus.syncNow()}>
-                    {syncStatus.pendingCount} to sync · Sync now
+                    {syncStatus.pendingCount} {t.toSyncPill} Â· {t.syncNowPill}
                   </button>
                 ) : (
-                  "Online"
+                  t.onlinePill
                 )}
               </span>
             ) : (
               <span className="sync-pill sync-pill--offline">
                 <span className="dot" />
-                Offline · {syncStatus.pendingCount} saved
+                {t.offlinePill} Â· {syncStatus.pendingCount}
               </span>
             )}
 
             <FeedbackWidget />
-            <span className="user-role-pill">{currentRole}</span>
+            <span className="user-role-pill">{currentRole === "FARMER" ? t.roleFarmerText : currentRole === "AGRICULTURAL_OFFICER" ? t.roleOfficerText : currentRole}</span>
           </div>
         </header>
 

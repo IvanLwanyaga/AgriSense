@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { getAlerts, acknowledgeAlert, resolveAlert, subscribeToAlerts } from "../services/alertService";
 import { getFarms } from "../services/firestoreService";
 import { useAuth } from "../context/useAuth";
+import { useLanguage } from "../context/LanguageContext";
 import type { FarmAlert } from "../types/alert";
 
 export default function AlertsPage() {
   const { user, profile } = useAuth();
+  const { t } = useLanguage();
   const [alerts, setAlerts] = useState<FarmAlert[]>([]);
   const [farmIds, setFarmIds] = useState<string[]>([]);
   const [selectedSeverity, setSelectedSeverity] = useState<string>("ALL");
@@ -54,10 +56,10 @@ export default function AlertsPage() {
     <section className="workspace-page alerts-page">
       <div className="workspace-page-header">
         <div>
-          <p className="eyebrow">Risk Management & Early Warning</p>
-          <h2>Alerts & Field Hazards</h2>
+          <p className="eyebrow">{t.recEyebrow}</p>
+          <h2>{t.alerts}</h2>
           <p>
-            Automatic warnings are based on local weather risk and BCTB screening results. No sensor is required.
+            {t.screeningWarningText}
           </p>
         </div>
       </div>

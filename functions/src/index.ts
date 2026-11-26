@@ -728,13 +728,15 @@ export const submitBctbAssessment = onRequest(
 
       const farmId = typeof assessment.farmId === "string" ? assessment.farmId : "";
       let organizationId: string | null = null;
+      let farmRecord: Record<string, unknown> | undefined;
       if (farmId) {
         const farmSnapshot = await db.collection("farms").doc(farmId).get();
         if (!farmSnapshot.exists || farmSnapshot.data()?.farmerId !== user.uid) {
           response.status(403).json({ error: "The selected farm does not belong to your account." });
           return;
         }
-        const farmOrganizationId = farmSnapshot.data()?.organizationId;
+        farmRecord = farmSnapshot.data();
+        const farmOrganizationId = farmRecord?.organizationId;
         organizationId = typeof farmOrganizationId === "string" ? farmOrganizationId : null;
       }
 
@@ -785,6 +787,7 @@ export const submitBctbAssessment = onRequest(
           id: followUpCaseId,
           assessmentId,
           farmId: farmId || "unspecified",
+          farmName: typeof farmRecord?.name === "string" ? farmRecord.name : "Robusta coffee farm",
           farmerId: user.uid,
           farmerName: String(user.profile.fullName || "Robusta Coffee Farmer"),
           farmerPhone: assessment.followUpConsent && user.profile.phone
@@ -792,13 +795,34 @@ export const submitBctbAssessment = onRequest(
             : null,
           district: typeof assessment.district === "string" ? assessment.district : "Unknown",
           subCounty: typeof assessment.subCounty === "string" ? assessment.subCounty : "Unknown",
+          village: typeof farmRecord?.village === "string" ? farmRecord.village : null,
+          parish: typeof farmRecord?.parish === "string" ? farmRecord.parish : null,
+          coffeeVariety: typeof farmRecord?.coffeeVariety === "string" ? farmRecord.coffeeVariety : null,
+          coffeeAcreage: typeof farmRecord?.coffeeAcreage === "number" ? farmRecord.coffeeAcreage : null,
+          treeCount: typeof farmRecord?.treeCount === "number" ? farmRecord.treeCount : null,
           riskLevel: riskResult.riskLevel,
           status: "new",
           verifiedObservation: "pending",
           followUpConsent: Boolean(assessment.followUpConsent),
           locationConsent: Boolean(assessment.locationConsent),
           photoUrl: photoPath,
+          symptoms: {
+            twigDieback: Boolean(assessment.twigDiebackObserved),
+            entryHoles: Boolean(assessment.pinSizedHoles),
+            yellowing: Boolean(assessment.yellowing),
+            blackening: Boolean(assessment.blackening),
+            wilting: Boolean(assessment.wilting),
+            drying: Boolean(assessment.drying),
+            affectedTwigCount: typeof assessment.affectedTwigCount === "number" ? assessment.affectedTwigCount : null,
+          },
           triggeredFactors: riskResult.triggeredFactors || [],
+          observationsHistory: [{
+            date: new Date().toISOString(),
+            riskLevel: riskResult.riskLevel,
+            notes: typeof assessment.farmerNotes === "string" ? assessment.farmerNotes : "",
+            score: typeof riskResult.internalScore === "number" ? riskResult.internalScore : undefined,
+            affectedTwigCount: typeof assessment.affectedTwigCount === "number" ? assessment.affectedTwigCount : undefined,
+          }],
           notes: [],
           timeline: [
             {
@@ -1534,7 +1558,17 @@ export const adminUpdateRules = onRequest(
         !ruleConfig ||
         typeof ruleConfig !== "object" ||
         typeof ruleConfig.version !== "string" ||
-        !/^[a-zA-Z0-9._-]{1,64}$/.test(ruleConfig.version)
+        !/^[a-zA-Z0-9._-]{1,64}$/.test(ruleConfig.version) ||
+        typeof ruleConfig.weights !== "object" ||
+        !ruleConfig.weights ||
+        Object.values(ruleConfig.weights).some((value) => typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) ||
+        typeof ruleConfig.thresholds !== "object" ||
+        !ruleConfig.thresholds ||
+        !Number.isInteger(ruleConfig.thresholds.lowMax) ||
+        !Number.isInteger(ruleConfig.thresholds.moderateMax) ||
+        ruleConfig.thresholds.lowMax < 0 ||
+        ruleConfig.thresholds.moderateMax > 100 ||
+        ruleConfig.thresholds.lowMax >= ruleConfig.thresholds.moderateMax
       ) {
         response
           .status(400)
@@ -1542,17 +1576,26 @@ export const adminUpdateRules = onRequest(
         return;
       }
 
-      const ruleDocRef = db
-        .collection("ruleConfigurations")
-        .doc(ruleConfig.version);
-      await ruleDocRef.set({
+      const ruleCollection = db.collection("ruleConfigurations");
+      const activeSnapshot = await ruleCollection.where("active", "==", true).get();
+      const batch = db.batch();
+      const ruleDocRef = ruleCollection.doc(ruleConfig.version);
+      activeSnapshot.docs.filter((item) => item.id !== ruleConfig.version).forEach((item) => batch.update(item.ref, {
+        active: false,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: user.uid,
+      }));
+      batch.set(ruleDocRef, {
         ...ruleConfig,
+        id: ruleConfig.version,
+        active: true,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: user.uid,
       });
 
       // Immutable audit record
-      await db.collection("auditLogs").add({
+      const auditRef = db.collection("auditLogs").doc();
+      batch.set(auditRef, {
         action: "RULE_CONFIG_SAVED",
         ruleVersion: ruleConfig.version,
         adminId: user.uid,
@@ -1560,6 +1603,7 @@ export const adminUpdateRules = onRequest(
         timestamp: FieldValue.serverTimestamp(),
         snapshot: ruleConfig,
       });
+      await batch.commit();
 
       response.json({ success: true, version: ruleConfig.version });
     } catch (error) {
@@ -2319,6 +2363,9 @@ export const updateUserAccess = onRequest(
     const email = typeof request.body?.email === "string" ? request.body.email.trim().toLowerCase() : "";
     const role = request.body?.role;
     const status = request.body?.status;
+    const assignedDistrict = typeof request.body?.assignedDistrict === "string"
+      ? request.body.assignedDistrict.trim()
+      : "";
     const allowedRoles: UserRole[] = [
       "PLATFORM_ADMIN",
       "ORG_ADMIN",
@@ -2331,8 +2378,9 @@ export const updateUserAccess = onRequest(
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       || !allowedRoles.includes(role)
       || (status !== "ACTIVE" && status !== "INACTIVE")
+      || (role === "AGRICULTURAL_OFFICER" && !assignedDistrict)
     ) {
-      response.status(400).json({ error: "Enter a valid user email, role, and ACTIVE/INACTIVE status." });
+      response.status(400).json({ error: "Enter a valid user email, role, ACTIVE/INACTIVE status, and assigned district for officers." });
       return;
     }
 
@@ -2359,6 +2407,7 @@ export const updateUserAccess = onRequest(
     }
 
     const userRef = services.db.collection("users").doc(targetUid);
+    const accessAuditRef = services.db.collection("auditLogs").doc();
     const result = await services.db.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(userRef);
       if (!snapshot.exists) return "profile-missing";
@@ -2376,9 +2425,21 @@ export const updateUserAccess = onRequest(
       transaction.update(userRef, {
         role,
         status,
+        ...(role === "AGRICULTURAL_OFFICER" ? { assignedDistrict } : {}),
         accessUpdatedAt: services.FieldValue.serverTimestamp(),
         accessUpdatedBy: administrator.uid,
         updatedAt: services.FieldValue.serverTimestamp(),
+      });
+      transaction.set(accessAuditRef, {
+        action: "USER_ACCESS_UPDATED",
+        targetUid,
+        targetEmail: email,
+        role,
+        status,
+        ...(role === "AGRICULTURAL_OFFICER" ? { assignedDistrict } : {}),
+        adminId: administrator.uid,
+        adminEmail: administrator.profile.email || null,
+        timestamp: services.FieldValue.serverTimestamp(),
       });
       return "updated";
     });

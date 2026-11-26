@@ -124,7 +124,13 @@ This starts Auth, Firestore, Storage, Functions, and Vite together. Local emulat
 
 Email/password credentials live in **Firebase Authentication**, not in Firestore user documents. A Firestore profile at `users/{authUid}` stores the app role and profile information; it cannot be used by itself to sign in. Local development uses the Auth emulator and its exported local data, so a production Firebase account will not authenticate against the emulator. The app remembers the last workspace page per signed-in account in that browser; browser storage is device-local and can be cleared independently of the account.
 
-There is no automatic privileged-admin account seed. To provision a platform administrator, first create the account in the intended Firebase Authentication environment, then use a trusted administrator setup process to create/update `users/{authUid}` with the matching UID, `role: "PLATFORM_ADMIN"`, and `status: "ACTIVE"`. Do not grant roles from the public client or store passwords in Firestore.
+There is no automatic privileged-admin account seed. To provision the first platform administrator, first create and verify the account in the intended Firebase Authentication environment. For a cloud project, sign in on the trusted setup machine with Google Application Default Credentials that have Firebase Authentication and Firestore administration rights, then run from `functions`:
+
+```powershell
+npm run admin:bootstrap -- --project agri-intelligence-platfo-c8f12 --email admin@example.com
+```
+
+The script looks up the existing Auth account, refuses unverified emails, prints the target project, and requires typing the full promotion confirmation before it writes `users/{authUid}` and a bootstrap audit event. Use the project's actual ID and the intended verified email. Local emulator provisioning is limited to `demo-agrisense-local` and requires both Auth and Firestore emulator environment variables. Never grant roles from the public client or store passwords in Firestore.
 
 ### Email OTP verification, roles, and subscriptions
 

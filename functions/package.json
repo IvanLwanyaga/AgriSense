@@ -7,6 +7,7 @@
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
+    "admin:bootstrap": "npm run build && node lib/bootstrapAdmin.js",
     "start": "node lib/server.js",
     "serve": "npm run build && firebase emulators:start --project demo-agrisense-local --only functions,firestore,auth,storage"
   },

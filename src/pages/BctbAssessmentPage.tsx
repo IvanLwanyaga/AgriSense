@@ -28,99 +28,63 @@ import type {
 type Mode = "GUIDED" | "EXPERT";
 const MODE_KEY = "agrisense_bctb_form_mode";
 
-const COPY = {
-  GUIDED: {
+function getLocalizedCopy(_mode: Mode, t: ReturnType<typeof useLanguage>["t"]) {
+  return {
     dieback: {
-      q: "Are the tips of some branches dying back?",
-      help: "Young twigs turn brown or black and dry out, starting from the tip.",
+      q: t.guidedDiebackQ,
+      help: t.guidedDiebackHelp,
     },
     holes: {
-      q: "Do you see tiny round holes in the twigs?",
-      help: "Holes about the size of a pin, often close to where a leaf joins the twig.",
+      q: t.guidedHolesQ,
+      help: t.guidedHolesHelp,
     },
     count: {
-      q: "About how many twigs are damaged?",
-      help: "Count on the trees you checked. A best guess is fine. Enter 0 if you saw none.",
+      q: t.guidedCountQ,
+      help: t.guidedCountHelp,
     },
     history: {
-      q: "Has twig borer been found on this farm before?",
-      help: "Answer Yes if you, a neighbour or an extension officer has seen it here.",
+      q: t.guidedHistoryQ,
+      help: t.guidedHistoryHelp,
     },
     pruningFreq: {
-      q: "How often do you prune your coffee?",
+      q: t.guidedPruningQ,
       options: [
-        { value: "regular", label: "Regularly", hint: "Every season" },
-        { value: "occasional", label: "Sometimes", hint: "Not every season" },
-        { value: "rare", label: "Rarely", hint: "Almost never" },
+        { value: "regular", label: t.guidedPruningRegular.split(" (")[0], hint: t.guidedPruningRegular.includes("(") ? t.guidedPruningRegular.split("(")[1].replace(")", "") : "" },
+        { value: "occasional", label: t.guidedPruningOccasional.split(" (")[0], hint: t.guidedPruningOccasional.includes("(") ? t.guidedPruningOccasional.split("(")[1].replace(")", "") : "" },
+        { value: "rare", label: t.guidedPruningRare.split(" (")[0], hint: t.guidedPruningRare.includes("(") ? t.guidedPruningRare.split("(")[1].replace(")", "") : "" },
       ],
     },
     sanitation: {
-      q: "How clean is your plantation?",
+      q: t.guidedSanitationQ,
       options: [
-        { value: "GOOD", label: "Clean", hint: "Dead twigs removed, weeds under control" },
-        { value: "FAIR", label: "Fair", hint: "Some dead twigs or weeds left" },
-        { value: "POOR", label: "Untidy", hint: "Many dead twigs, bush or weeds" },
+        { value: "GOOD", label: t.guidedSanitationGood.split(" (")[0], hint: t.guidedSanitationGood.includes("(") ? t.guidedSanitationGood.split("(")[1].replace(")", "") : "" },
+        { value: "FAIR", label: t.guidedSanitationFair.split(" (")[0], hint: t.guidedSanitationFair.includes("(") ? t.guidedSanitationFair.split("(")[1].replace(")", "") : "" },
+        { value: "POOR", label: t.guidedSanitationPoor.split(" (")[0], hint: t.guidedSanitationPoor.includes("(") ? t.guidedSanitationPoor.split("(")[1].replace(")", "") : "" },
       ],
     },
     recentPruning: {
-      q: "Have you pruned in the last few weeks?",
+      q: t.guidedRecentPruningQ,
       help: "",
     },
-  },
-  EXPERT: {
-    dieback: {
-      q: "Twig dieback observed",
-      help: "Distinct from general wilting or drying. Sent to the model as 0/1.",
-    },
-    holes: {
-      q: "Suspected pin-sized entry holes",
-      help: "Boreholes on twigs or primary branches. Sent to the model as 0/1.",
-    },
-    count: {
-      q: "Affected twig count",
-      help: "Whole number from 0 to 10,000, counted across the sampled trees.",
-    },
-    history: {
-      q: "Previous BCTB report on this farm",
-      help: "Recorded by you or an extension officer. Do not use this prediction as the report.",
-    },
-    pruningFreq: {
-      q: "Pruning frequency",
-      options: [
-        { value: "regular", label: "Regular", hint: "Each season" },
-        { value: "occasional", label: "Occasional", hint: "Irregular" },
-        { value: "rare", label: "Rare", hint: "Seldom or never" },
-      ],
-    },
-    sanitation: {
-      q: "Farm sanitation",
-      options: [
-        { value: "GOOD", label: "Good", hint: "Residues removed, weeds managed" },
-        { value: "FAIR", label: "Fair / moderate", hint: "Sent to the model as “moderate”" },
-        { value: "POOR", label: "Poor", hint: "Residues and alternative hosts present" },
-      ],
-    },
-    recentPruning: {
-      q: "Pruning done recently",
-      help: "Sent to the model as 0/1.",
-    },
-  },
-} as const;
+  };
+}
 
-const RISK_PLAIN: Record<"LOW" | "MODERATE" | "HIGH", { title: string; line: string }> = {
-  LOW: {
-    title: "Low risk",
-    line: "Your answers match farms with a lower chance of twig borer. Keep checking your trees regularly.",
-  },
-  MODERATE: {
-    title: "Moderate risk",
-    line: "Your answers match farms with some chance of twig borer. Check your young twigs again soon.",
-  },
-  HIGH: {
-    title: "High risk",
-    line: "Your answers match farms with a higher chance of twig borer. Check your trees and speak to an extension officer.",
-  },
-};
+function getRiskPlain(t: ReturnType<typeof useLanguage>["t"]): Record<"LOW" | "MODERATE" | "HIGH", { title: string; line: string }> {
+  return {
+    LOW: {
+      title: t.riskLowHeading,
+      line: t.riskLowBody,
+    },
+    MODERATE: {
+      title: t.riskModerateHeading,
+      line: t.riskModerateBody,
+    },
+    HIGH: {
+      title: t.riskHighHeading,
+      line: t.riskHighBody,
+    },
+  };
+}
 
 function localDateInputValue(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -438,12 +402,6 @@ function missingFields(a: BctbAssessmentInput): { key: FieldKey; step: number }[
   return out;
 }
 
-const STEP_LABELS = ["Twig signs", "Farm history", "Farm care", "Farm readings", "Review"];
-
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
-
 export default function BctbAssessmentPage({
   onResult,
 }: {
@@ -459,7 +417,9 @@ export default function BctbAssessmentPage({
       return "GUIDED";
     }
   });
-  const copy = COPY[mode];
+  const copy = getLocalizedCopy(mode, t);
+  const riskPlain = getRiskPlain(t);
+  const stepLabels = [t.stepTwigSigns, t.stepFarmHistory, t.stepFarmCare, t.stepFarmReadings, t.stepReview];
 
   const [assessment, setAssessment] = useState<BctbAssessmentInput>(initialAssessment);
   const [result, setResult] = useState<ResearchBctbPrediction | null>(null);
@@ -990,7 +950,7 @@ export default function BctbAssessmentPage({
         <>
           <nav className="screening-stepper" aria-label={`Step ${currentStep} of 5`}>
             <ol>
-              {STEP_LABELS.map((label, index) => {
+              {stepLabels.map((label, index) => {
                 const n = index + 1;
                 const state = n === currentStep ? "current" : n < currentStep ? "complete" : "";
                 return (
@@ -1339,10 +1299,10 @@ export default function BctbAssessmentPage({
           <div className="result-heading">
             <div>
               <h3>
-                {RISK_PLAIN[result.predicted_risk].title}
+                {riskPlain[result.predicted_risk].title}
                 <small> (synthetic-data model)</small>
               </h3>
-              <p>{RISK_PLAIN[result.predicted_risk].line}</p>
+              <p>{riskPlain[result.predicted_risk].line}</p>
               <p className="score-label">
                 Uncalibrated model output for this class:{" "}
                 <strong>{(result.class_probabilities[result.predicted_risk] * 100).toFixed(1)}%</strong>. This is
