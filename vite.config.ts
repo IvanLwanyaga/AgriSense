@@ -31,7 +31,11 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
-        // BCTB prediction now runs on Render.
+        // Health and prediction both go through the authenticated model gateway.
+        '/api/modelHealth': {
+          target: renderApiUrl,
+          changeOrigin: true,
+        },
         '/api/predictResearchBctb': {
           target: renderApiUrl,
           changeOrigin: true,

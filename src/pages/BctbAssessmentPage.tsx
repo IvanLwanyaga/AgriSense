@@ -8,7 +8,6 @@ import {
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/useAuth";
 import { predictResearchBctbRisk } from "../services/researchBctbModelService";
-import { buildLocalResearchPrediction, buildWeatherSnapshot } from "../services/localBctbPrediction";
 import { queueResearchPrediction } from "../services/offlineSyncService";
 import { sendRealSmsAlert } from "../services/smsService";
 import { getResearchPredictionQueue } from "../services/storage/indexedDbService";
@@ -473,10 +472,13 @@ export default function BctbAssessmentPage({
   useEffect(() => {
     let active = true;
     fetch("/api/modelHealth")
-      .then((response) => response.json() as Promise<{ ok?: boolean; status?: number }>)
-      .then((data) => {
+      .then(async (response) => ({
+        httpOk: response.ok,
+        data: await response.json() as { ok?: boolean; status?: number },
+      }))
+      .then(({ httpOk, data }) => {
         if (!active) return;
-        setModelHealth(data.ok ? "online" : "offline");
+        setModelHealth(httpOk && data.ok === true ? "online" : "offline");
         setModelHealthDetail(typeof data.status === "number" ? String(data.status) : "");
       })
       .catch(() => {
@@ -655,20 +657,7 @@ export default function BctbAssessmentPage({
         await saveForSync();
         return;
       }
-      let prediction: ResearchBctbPrediction;
-      try {
-        prediction = await predictResearchBctbRisk(modelInputs);
-      } catch (predictionError) {
-        console.warn(
-          "Prediction service unavailable; using the local AgriSense rule engine.",
-          predictionError,
-        );
-        prediction = buildLocalResearchPrediction(
-          assessment,
-          buildWeatherSnapshot(assessment.fieldReadings),
-          language,
-        );
-      }
+      const prediction: ResearchBctbPrediction = await predictResearchBctbRisk(modelInputs);
       saveResearchScreeningEntry(user?.uid || "", assessment, modelInputs, prediction);
       if (user?.uid) setVisitJournal(getResearchScreeningJournal(user.uid));
       setResult(prediction);
@@ -764,7 +753,7 @@ export default function BctbAssessmentPage({
                 ? "Trained model online"
                 : modelHealthDetail === "429"
                   ? "Trained model rate-limited (429)"
-                  : "Trained model offline — device fallback"}
+                  : "Trained model offline — predictions unavailable"}
           </span>
         </div>
         <div className="mode-toggle" role="group" aria-label="Form style">

@@ -5,6 +5,10 @@
       "destination": "https://agrisense-auth-api.onrender.com/api/predictResearchBctb"
     },
     {
+      "source": "/api/modelHealth",
+      "destination": "https://agrisense-auth-api.onrender.com/api/modelHealth"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://europe-west1-agri-intelligence-platfo-c8f12.cloudfunctions.net/:path*"
     }
