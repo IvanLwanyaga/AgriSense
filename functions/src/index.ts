@@ -362,17 +362,21 @@ export const getUcdaCoffeePrices = onRequest(
       }
 
       try {
-        const upstream = await fetch("https://ugandacoffee.go.ug/news", {
+        const upstream = await fetch("https://new.ugandacoffee.go.ug/node/202", {
           headers: { Accept: "text/html" },
           signal: AbortSignal.timeout(12_000),
         });
         if (!upstream.ok) throw new Error(`UCDA price page returned HTTP ${upstream.status}.`);
         const html = await upstream.text();
         const prices = extractUcdaCoffeePrices(html);
-        await automaticPriceDocument.set({
+        const updatedAt = FieldValue.serverTimestamp();
+        const writeBatch = db.batch();
+        writeBatch.set(automaticPriceDocument, { ...prices, updatedAt });
+        writeBatch.set(db.collection("marketPriceHistory").doc(prices.effectiveDate), {
           ...prices,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+          updatedAt,
+        }, { merge: true });
+        await writeBatch.commit();
         response.json({ refreshed: true, effectiveDate: prices.effectiveDate });
       } catch (upstreamError) {
         if (cachedSnapshot.exists) {

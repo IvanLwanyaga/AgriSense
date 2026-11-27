@@ -151,6 +151,7 @@ export async function createFarm(
     treeCount?: number;
     shadePercentage?: "NONE" | "LOW_UNDER_20" | "MEDIUM_20_TO_40" | "HEAVY_OVER_40";
     topography?: "HILLSIDE" | "VALLEY" | "FLAT";
+    coordinateSource?: "GOOGLE_PLACES" | "GPS" | "DISTRICT_CENTROID";
   }
 ): Promise<Farm> {
   const farmData = {
@@ -164,6 +165,12 @@ export async function createFarm(
       district,
       subCounty,
       country: "Uganda",
+      granularity: additional?.coordinateSource === "GOOGLE_PLACES" && !additional?.village
+        ? "SUBCOUNTY_CENTROID"
+        : "EXACT",
+      ...(additional?.coordinateSource === "GOOGLE_PLACES" || additional?.coordinateSource === "GPS"
+        ? { coordinateSource: additional.coordinateSource }
+        : {}),
     },
     district,
     subCounty,

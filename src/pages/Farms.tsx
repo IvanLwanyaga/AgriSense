@@ -40,6 +40,8 @@ export default function Farms() {
   const [parish, setParish] = useState("");
   const [latitude, setLatitude] = useState(UGANDA_DISTRICTS[0].latitude.toString());
   const [longitude, setLongitude] = useState(UGANDA_DISTRICTS[0].longitude.toString());
+  const [coordinatesConfirmed, setCoordinatesConfirmed] = useState(false);
+  const [coordinatesSource, setCoordinatesSource] = useState<"GOOGLE_PLACES" | "GPS" | "DISTRICT_CENTROID">("DISTRICT_CENTROID");
   const [farmArea, setFarmArea] = useState("2.5");
   const [coffeeAcreage, setCoffeeAcreage] = useState("2.0");
   const [treeCount, setTreeCount] = useState("900");
@@ -62,12 +64,16 @@ export default function Farms() {
       (pos) => {
         setLatitude(pos.coords.latitude.toFixed(6));
         setLongitude(pos.coords.longitude.toFixed(6));
+        setCoordinatesConfirmed(true);
+        setCoordinatesSource("GPS");
         setGpsMessage(`✓ Captured GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} (±${Math.round(pos.coords.accuracy)}m)`);
         setGpsLoading(false);
       },
       (err) => {
         console.warn("GPS capture failed", err);
-        setGpsMessage("Could not acquire GPS. Using district fallback coordinate.");
+        setCoordinatesConfirmed(false);
+        setCoordinatesSource("DISTRICT_CENTROID");
+        setGpsMessage("Could not acquire GPS. Select the farm village or sub-county from Google Maps instead.");
         setGpsLoading(false);
       },
       { enableHighAccuracy: true, timeout: 15000 }
@@ -120,22 +126,32 @@ export default function Farms() {
     if (matched) {
       setLatitude(matched.latitude.toString());
       setLongitude(matched.longitude.toString());
+      setCoordinatesConfirmed(false);
+      setCoordinatesSource("DISTRICT_CENTROID");
     }
   }
 
   const handleSubCountySelect = useCallback((location: SelectedGoogleLocation) => {
     setSubCounty(location.name);
+    setCoordinatesConfirmed(location.latitude !== undefined && location.longitude !== undefined);
+    if (location.latitude === undefined || location.longitude === undefined) setCoordinatesSource("DISTRICT_CENTROID");
     if (location.latitude !== undefined && location.longitude !== undefined) {
       setLatitude(location.latitude.toFixed(6));
       setLongitude(location.longitude.toFixed(6));
+      setCoordinatesConfirmed(true);
+      setCoordinatesSource("GOOGLE_PLACES");
     }
   }, []);
 
   const handleVillageSelect = useCallback((location: SelectedGoogleLocation) => {
     setVillage(location.name);
+    setCoordinatesConfirmed(location.latitude !== undefined && location.longitude !== undefined);
+    if (location.latitude === undefined || location.longitude === undefined) setCoordinatesSource("DISTRICT_CENTROID");
     if (location.latitude !== undefined && location.longitude !== undefined) {
       setLatitude(location.latitude.toFixed(6));
       setLongitude(location.longitude.toFixed(6));
+      setCoordinatesConfirmed(true);
+      setCoordinatesSource("GOOGLE_PLACES");
     }
   }, []);
 
@@ -143,14 +159,22 @@ export default function Farms() {
     setParish(location.name);
   }, []);
 
-  const clearSubCountySelection = useCallback(() => setSubCounty(""), []);
-  const clearVillageSelection = useCallback(() => setVillage(""), []);
+  const clearSubCountySelection = useCallback(() => { setSubCounty(""); setCoordinatesConfirmed(false); setCoordinatesSource("DISTRICT_CENTROID"); }, []);
+  const clearVillageSelection = useCallback(() => { setVillage(""); setCoordinatesConfirmed(false); setCoordinatesSource("DISTRICT_CENTROID"); }, []);
   const clearParishSelection = useCallback(() => setParish(""), []);
 
   async function handleCreateFarm(e: React.FormEvent) {
     e.preventDefault();
-    if (!subCounty) {
-      setError("Choose the farm's sub-county from the Google Maps suggestions.");
+    const farmSubCounty = subCounty || profile?.assignedSubCounty || village;
+    if (!farmSubCounty) {
+      setError("Choose the farm's sub-county or village from the Google Maps suggestions.");
+      return;
+    }
+    const farmLatitude = Number(latitude);
+    const farmLongitude = Number(longitude);
+    if (!coordinatesConfirmed || !Number.isFinite(farmLatitude) || !Number.isFinite(farmLongitude)
+      || farmLatitude < -90 || farmLatitude > 90 || farmLongitude < -180 || farmLongitude > 180) {
+      setError("Select the farm village or sub-county from Google Maps, or capture GPS at the farm, before saving.");
       return;
     }
     setSaving(true);
@@ -162,12 +186,12 @@ export default function Farms() {
         isStandalone ? null : profile?.organizationId || null,
         farmName,
         farmDesc,
-        parseFloat(latitude) || 0.34,
-        parseFloat(longitude) || 32.58,
+        farmLatitude,
+        farmLongitude,
         selectedDistrict,
         parseFloat(farmArea) || undefined,
         "ROBUSTA_COFFEE",
-        subCounty || undefined,
+        farmSubCounty,
         coffeeVariety,
         coffeeAge,
         shadePercentage === "HEAVY_OVER_40" ? "DENSE" : shadePercentage === "NONE" ? "OPEN_FULL_SUN" : "MODERATE",
@@ -175,6 +199,7 @@ export default function Farms() {
         {
           parish: parish || undefined,
           village: village || undefined,
+          coordinateSource: coordinatesSource,
           coffeeAcreage: parseFloat(coffeeAcreage) || undefined,
           treeCount: parseInt(treeCount, 10) || undefined,
           shadePercentage,
@@ -561,6 +586,7 @@ export default function Farms() {
                     {gpsLoading ? "Acquiring GPS..." : "📍 Capture My Current GPS"}
                   </button>
                 </div>
+                <small>Coordinates come from the selected Google Maps place. Use GPS while at the farm for the most precise field location.</small>
                 {gpsMessage && (
                   <p style={{ margin: "0 0 8px 0", fontSize: "0.78rem", color: gpsMessage.startsWith("✓") ? "#2e7d32" : "#c62828" }}>
                     {gpsMessage}
@@ -573,7 +599,7 @@ export default function Farms() {
                       type="number"
                       step="any"
                       value={latitude}
-                      onChange={(e) => setLatitude(e.target.value)}
+                      readOnly
                       required
                     />
                   </label>
@@ -583,7 +609,7 @@ export default function Farms() {
                       type="number"
                       step="any"
                       value={longitude}
-                      onChange={(e) => setLongitude(e.target.value)}
+                      readOnly
                       required
                     />
                   </label>

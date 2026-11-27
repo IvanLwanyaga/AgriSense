@@ -1,7 +1,11 @@
 import {
   deleteDoc,
+  collection,
   doc,
+  limit,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   Timestamp,
@@ -32,6 +36,8 @@ export interface DailyCoffeePriceSnapshot {
   updatedAt: string;
   updatedBy: string;
 }
+
+export type CoffeePriceHistoryPoint = DailyCoffeePriceSnapshot;
 
 export interface DailyCoffeePriceInput {
   effectiveDate: string;
@@ -179,6 +185,27 @@ export function subscribeToDailyCoffeePrices(
     unsubscribeAdmin();
     unsubscribeAutomatic();
   };
+}
+
+export function subscribeToCoffeePriceHistory(
+  onUpdate: (history: CoffeePriceHistoryPoint[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  const historyQuery = query(
+    collection(db, "marketPriceHistory"),
+    orderBy("effectiveDate", "desc"),
+    limit(60),
+  );
+  return onSnapshot(historyQuery, (snapshot) => {
+    try {
+      const history = snapshot.docs
+        .map((item) => parseSnapshot(item.data()))
+        .sort((left, right) => left.effectiveDate.localeCompare(right.effectiveDate));
+      onUpdate(history);
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error("UCDA price history is invalid."));
+    }
+  }, (error) => onError(new Error("UCDA price history could not be loaded.", { cause: error })));
 }
 
 export async function refreshUcdaCoffeePrices(): Promise<void> {

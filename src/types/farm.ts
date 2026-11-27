@@ -9,6 +9,7 @@ export interface FarmLocation {
   region?: string;
   country: string;
   granularity?: "EXACT" | "SUBCOUNTY_CENTROID";
+  coordinateSource?: "GOOGLE_PLACES" | "GPS";
 }
 
 export interface FarmBoundaryPoint {

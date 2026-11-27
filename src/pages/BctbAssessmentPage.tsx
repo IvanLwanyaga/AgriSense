@@ -7,6 +7,9 @@ import {
 } from "../services/bctbAssessmentService";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/useAuth";
+import { getFarms } from "../services/firestoreService";
+import { fetchBctbWeatherMetrics } from "../services/weatherService";
+import type { Farm } from "../types/farm";
 import { predictResearchBctbRisk } from "../services/researchBctbModelService";
 import { queueResearchPrediction } from "../services/offlineSyncService";
 import { sendRealSmsAlert } from "../services/smsService";
@@ -421,6 +424,10 @@ export default function BctbAssessmentPage({
   const stepLabels = [t.stepTwigSigns, t.stepFarmHistory, t.stepFarmCare, t.stepFarmReadings, t.stepReview];
 
   const [assessment, setAssessment] = useState<BctbAssessmentInput>(initialAssessment);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [selectedFarmId, setSelectedFarmId] = useState("");
+  const [farmWeatherStatus, setFarmWeatherStatus] = useState("");
+  const [farmWeatherLoading, setFarmWeatherLoading] = useState(false);
   const [result, setResult] = useState<ResearchBctbPrediction | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [modelError, setModelError] = useState("");
@@ -432,6 +439,63 @@ export default function BctbAssessmentPage({
   const [activeTab, setActiveTab] = useState<"NEW_ASSESSMENT" | "HISTORY">("NEW_ASSESSMENT");
   const [historyList] = useState(() => getLocalAssessmentHistory());
   const [visitJournal, setVisitJournal] = useState<ResearchScreeningJournalEntry[]>(() => user?.uid ? getResearchScreeningJournal(user.uid) : []);
+  const selectedFarm = farms.find((farm) => farm.id === selectedFarmId);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    let active = true;
+    void getFarms(user.uid, profile?.organizationId).then((items) => {
+      if (!active) return;
+      setFarms(items);
+      setSelectedFarmId(items[0]?.id || "");
+    }).catch((cause) => {
+      console.error("Could not load farms for location-specific screening.", cause);
+      if (active) setFarmWeatherStatus("Farm locations could not be loaded. Register a farm before screening.");
+    });
+    return () => { active = false; };
+  }, [user?.uid, profile?.organizationId]);
+
+  useEffect(() => {
+    if (!selectedFarm) return;
+    let active = true;
+    setFarmWeatherLoading(true);
+    setFarmWeatherStatus("Loading the previous 30 days of weather for this farm location…");
+    setAssessment((current) => ({
+      ...current,
+      farmId: selectedFarm.id,
+      district: selectedFarm.district,
+      subCounty: selectedFarm.subCounty,
+      coffeeVariety: selectedFarm.coffeeVariety ?? current.coffeeVariety,
+      coffeeAge: selectedFarm.coffeeAge ?? current.coffeeAge,
+      shadeCanopy: selectedFarm.shadeCanopy ?? current.shadeCanopy,
+    }));
+    void fetchBctbWeatherMetrics(
+      selectedFarm.location.latitude,
+      selectedFarm.location.longitude,
+      selectedFarm.district,
+      selectedFarm.subCounty,
+    ).then((weather) => {
+      if (!active) return;
+      setAssessment((current) => ({
+        ...current,
+        fieldReadings: {
+          ...initialAssessment.fieldReadings!,
+          ...current.fieldReadings,
+          rainfall30dMm: weather.cumulativeRainfall30dMm,
+          meanTemperature30dC: weather.tempAvg30dC,
+        },
+      }));
+      setFarmWeatherStatus(`Weather estimate loaded for ${selectedFarm.village || selectedFarm.subCounty || selectedFarm.district} at ${selectedFarm.location.latitude.toFixed(5)}, ${selectedFarm.location.longitude.toFixed(5)}: ${weather.cumulativeRainfall30dMm} mm rain in 30 days and ${weather.tempAvg30dC}°C mean temperature (${weather.provider}).`);
+      setFarmWeatherLoading(false);
+    }).catch((cause: unknown) => {
+      console.warn("Could not load location-specific screening weather.", cause);
+      if (active) {
+        setFarmWeatherLoading(false);
+        setFarmWeatherStatus("Location-specific weather is unavailable. Enter a rain-gauge reading in Farm readings if you have one.");
+      }
+    });
+    return () => { active = false; };
+  }, [selectedFarm]);
 
   const initialDraft = useRef(loadAssessmentDraft());
   const [hasDraft, setHasDraft] = useState(Boolean(initialDraft.current));
@@ -618,6 +682,9 @@ export default function BctbAssessmentPage({
     const saved = loadAssessmentDraft();
     if (saved) {
       setAssessment((prev) => ({ ...prev, ...saved.draft }));
+      if (saved.draft.farmId && farms.some((farm) => farm.id === saved.draft.farmId)) {
+        setSelectedFarmId(saved.draft.farmId);
+      }
       setHasDraft(false);
     }
   }
@@ -625,7 +692,17 @@ export default function BctbAssessmentPage({
   function handleDiscardDraft() {
     clearAssessmentDraft();
     dirty.current = false;
-    setAssessment(initialAssessment);
+    setAssessment({
+      ...initialAssessment,
+      farmId: selectedFarm?.id,
+      district: selectedFarm?.district,
+      subCounty: selectedFarm?.subCounty,
+      fieldReadings: {
+        ...initialAssessment.fieldReadings!,
+        rainfall30dMm: assessment.fieldReadings?.rainfall30dMm ?? null,
+        meanTemperature30dC: assessment.fieldReadings?.meanTemperature30dC ?? null,
+      },
+    });
     setHasDraft(false);
     setResult(null);
     setModelError("");
@@ -635,6 +712,14 @@ export default function BctbAssessmentPage({
 
   async function submitAssessment(event: React.FormEvent) {
     event.preventDefault();
+    if (!selectedFarm) {
+      setModelError("Register a farm with a Google Maps location or GPS coordinates before screening.");
+      return;
+    }
+    if (farmWeatherLoading) {
+      setModelError("Wait for the farm's location-specific weather estimate to finish loading, then submit again.");
+      return;
+    }
     const modelInputs = toResearchModelInputs(assessment);
     if (!modelInputs) {
       setShowErrors(true);
@@ -958,6 +1043,25 @@ export default function BctbAssessmentPage({
               })}
             </ol>
           </nav>
+
+          <section className="panel screening-panel" aria-label="Farm location for screening">
+            <label className="reading-field" htmlFor="screening-farm"><span className="reading-label">Farm being screened</span>
+              <select id="screening-farm" value={selectedFarmId} onChange={(event) => {
+                const nextFarm = farms.find((farm) => farm.id === event.target.value);
+                setSelectedFarmId(event.target.value);
+                if (nextFarm) {
+                  setFarmWeatherLoading(true);
+                  setFarmWeatherStatus("Loading the previous 30 days of weather for this farm location…");
+                  dirty.current = true;
+                  setAssessment((current) => ({ ...current, farmId: nextFarm.id, district: nextFarm.district, subCounty: nextFarm.subCounty, coffeeVariety: nextFarm.coffeeVariety ?? current.coffeeVariety, coffeeAge: nextFarm.coffeeAge ?? current.coffeeAge, shadeCanopy: nextFarm.shadeCanopy ?? current.shadeCanopy }));
+                }
+              }} required disabled={farms.length === 0}>
+                {farms.length === 0 ? <option value="">Register a farm before screening</option> : farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name} — {[farm.village, farm.subCounty, farm.district].filter(Boolean).join(", ")}</option>)}
+              </select>
+            </label>
+            {selectedFarm && <p className="step-intro">Weather and rainfall will use this farm's saved coordinates ({selectedFarm.location.latitude.toFixed(5)}, {selectedFarm.location.longitude.toFixed(5)}).</p>}
+            {farmWeatherStatus && <p role="status" className="reading-mode-note">{farmWeatherStatus}</p>}
+          </section>
 
           <form className="screening-form screening-wizard" onSubmit={submitAssessment} noValidate>
             {currentStep === 1 && (

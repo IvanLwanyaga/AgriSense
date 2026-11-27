@@ -7,17 +7,22 @@ import {
   onSnapshot,
   orderBy,
   query,
+  type QueryConstraint,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../context/useAuth";
 import { useLanguage } from "../context/LanguageContext";
+import { getFarms } from "../services/firestoreService";
+import type { Farm } from "../types/farm";
 
 type HelpCategory = "bctb_signs" | "pruning" | "shade" | "weather";
 interface HelpQuestion {
   id: string;
   farmerId: string;
   farmerName: string;
+  farmId?: string;
   district?: string;
   subCounty?: string;
   category: HelpCategory;
@@ -50,6 +55,8 @@ export default function HelpRoomPage() {
   const isFarmer = profile?.role === "FARMER";
   const isSupport = Boolean(profile && STAFF_ROLES.includes(profile.role));
   const [questions, setQuestions] = useState<HelpQuestion[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [farmId, setFarmId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [replies, setReplies] = useState<HelpReply[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<HelpCategory | "all">("all");
@@ -64,13 +71,36 @@ export default function HelpRoomPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!user || !isFarmer) {
+      setFarms([]);
+      setFarmId("");
+      return;
+    }
+    let active = true;
+    void getFarms(user.uid, profile?.organizationId).then((items) => {
+      if (!active) return;
+      setFarms(items);
+      setFarmId((current) => items.some((farm) => farm.id === current) ? current : items[0]?.id || "");
+    }).catch((cause) => console.error("Could not load farmer farms for help room.", cause));
+    return () => { active = false; };
+  }, [user?.uid, isFarmer, profile?.organizationId]);
+
+  useEffect(() => {
     if (!user || (!isFarmer && !isSupport)) {
       setQuestions([]);
       setSelectedId("");
       return;
     }
     const base = collection(db, "helpQuestions");
-    const inboxQuery = query(base, orderBy("createdAt", "desc"), limit(100));
+    const constraints: QueryConstraint[] = profile?.role === "FARMER"
+      ? [where("farmerId", "==", user.uid)]
+      : profile?.role === "PLATFORM_ADMIN"
+        ? []
+        : [
+            where("district", "==", profile?.assignedDistrict || ""),
+            ...(profile?.assignedSubCounty ? [where("subCounty", "==", profile.assignedSubCounty)] : []),
+          ];
+    const inboxQuery = query(base, ...constraints, limit(100));
 
     return onSnapshot(
       inboxQuery,
@@ -87,7 +117,7 @@ export default function HelpRoomPage() {
         setError(t.helpRoomError);
       },
     );
-  }, [user, isFarmer, isSupport, t.helpRoomError]);
+  }, [user, profile?.role, profile?.assignedDistrict, profile?.assignedSubCounty, isFarmer, isSupport, t.helpRoomError]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -109,6 +139,7 @@ export default function HelpRoomPage() {
   }, [selectedId, replies]);
 
   const selected = questions.find((item) => item.id === selectedId) || null;
+  const selectedFarm = farms.find((farm) => farm.id === farmId);
   const visibleQuestions = useMemo(
     () => (categoryFilter === "all" ? questions : questions.filter((item) => item.category === categoryFilter))
       .sort((a, b) => (b.lastMessageAt ?? b.createdAt) - (a.lastMessageAt ?? a.createdAt)),
@@ -126,11 +157,15 @@ export default function HelpRoomPage() {
       return;
     }
     if (!isFarmer) {
-      setError("Only farmer accounts can post a new question.");
+      setError("Only farmer accounts can start a support inquiry.");
       return;
     }
     if (!title.trim() || !message.trim()) {
       setError("Add a question title and describe what is happening on your farm.");
+      return;
+    }
+    if (!selectedFarm) {
+      setError("Register or select a farm first so we can connect you with the extension officer for its area.");
       return;
     }
     setSending(true);
@@ -141,8 +176,9 @@ export default function HelpRoomPage() {
       const posted = await addDoc(collection(db, "helpQuestions"), {
         farmerId: user.uid,
         farmerName: profile.fullName,
-        district: profile.assignedDistrict || "",
-        subCounty: profile.assignedSubCounty || "",
+        farmId: selectedFarm.id,
+        district: selectedFarm.district,
+        subCounty: selectedFarm.subCounty || "",
         category,
         title: title.trim().slice(0, 140),
         message: firstMessage,
@@ -224,9 +260,10 @@ export default function HelpRoomPage() {
       <div className="help-room-layout">
         <aside className={`panel help-question-list ${mobileThread ? "mobile-hidden" : ""}`}>
           <div className="help-inbox-heading"><div><span className="section-kicker">{t.helpLiveDiscussions}</span><h3>{isSupport ? "Farmer conversations" : t.helpQuestions}</h3></div><span className="help-room-count">{visibleQuestions.length}</span></div>
-          {isFarmer && <button className="help-new-chat-button" type="button" onClick={() => setShowNewConversation(true)}><span aria-hidden="true">＋</span> {t.helpAskOfficer}</button>}
+          {isFarmer && <button className="help-new-chat-button" type="button" disabled={farms.length === 0} onClick={() => setShowNewConversation(true)}><span aria-hidden="true">＋</span> {t.helpAskOfficer}</button>}
+          {isFarmer && farms.length === 0 && <p className="help-waiting-note">Register a farm first so your inquiry reaches the extension officer assigned to its district and sub-county.</p>}
           <div className="help-conversation-list">
-            {visibleQuestions.length === 0 ? <div className="help-inbox-empty"><span aria-hidden="true">💬</span><p>{t.helpNoQuestions}</p>{isFarmer && <button type="button" className="primary-button" onClick={() => setShowNewConversation(true)}>{t.helpStartConversation}</button>}</div> : visibleQuestions.map((item) => {
+            {visibleQuestions.length === 0 ? <div className="help-inbox-empty"><span aria-hidden="true">💬</span><p>{t.helpNoQuestions}</p>{isFarmer && <button type="button" className="primary-button" disabled={farms.length === 0} onClick={() => setShowNewConversation(true)}>{t.helpStartConversation}</button>}</div> : visibleQuestions.map((item) => {
               const lastMessageAt = item.lastMessageAt ?? item.createdAt;
               return <button key={item.id} type="button" className={`help-question-item ${selectedId === item.id ? "selected" : ""}`} onClick={() => { setSelectedId(item.id); setMobileThread(true); }}>
                 <span className="help-list-avatar" aria-hidden="true">{item.farmerName.slice(0, 1).toUpperCase()}</span>
@@ -266,10 +303,11 @@ export default function HelpRoomPage() {
         <form className="panel help-ask-form" onSubmit={postQuestion} role="dialog" aria-modal="true" aria-labelledby="help-new-title">
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="help-new-heading"><span className="help-thread-avatar" aria-hidden="true">✉</span><div><span className="section-kicker">{t.helpAskOfficer}</span><h3 id="help-new-title">{t.helpStartConversation}</h3></div><button type="button" className="help-close-button" onClick={() => setShowNewConversation(false)} aria-label="Close">×</button></div>
+          {isFarmer && farms.length > 0 && <><label htmlFor="help-farm">Farm location for regional support</label><select id="help-farm" value={farmId} onChange={(event) => setFarmId(event.target.value)} required><option value="" disabled>Select a farm</option>{farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name} — {[farm.village, farm.subCounty, farm.district].filter(Boolean).join(", ")}</option>)}</select></>}
           <label htmlFor="help-category">{t.helpTopic}</label><select id="help-category" value={category} onChange={(event) => setCategory(event.target.value as HelpCategory)}>{Object.entries(CATEGORY_KEYS).map(([id, key]) => <option key={id} value={id}>{t[key]}</option>)}</select>
           <label htmlFor="help-title">{t.helpQuestionTitle}</label><input id="help-title" value={title} placeholder={t.helpQuestionPlaceholder} onChange={(event) => setTitle(event.target.value)} maxLength={140} required />
           <label htmlFor="help-message">{t.helpDescribe}</label><textarea id="help-message" value={message} placeholder={t.helpMessagePlaceholder} onChange={(event) => setMessage(event.target.value)} rows={5} maxLength={3000} required />
-          <div className="help-private-note"><span aria-hidden="true">🌍</span> Farmers and agricultural officers can see this question and its replies.</div>
+          <div className="help-private-note"><span aria-hidden="true">🌍</span> This conversation is shared only with you and extension officers assigned to your farm region.</div>
           <div className="help-new-actions"><button className="outline-button" type="button" onClick={() => setShowNewConversation(false)}>Cancel</button><button className="primary-button" type="submit" disabled={sending || !title.trim() || !message.trim()}>{sending ? t.helpPosting : t.helpSendQuestion}</button></div>
         </form>
       </div>}

@@ -62,6 +62,18 @@ service cloud.firestore {
       return isOfficer() || hasRole('FARM_MANAGER');
     }
 
+    function canReadHelpQuestion(question) {
+      return isEmailVerified() && (
+        question.farmerId == request.auth.uid
+        || hasRole('PLATFORM_ADMIN')
+        || (canAnswerHelpRoom()
+          && question.district == getUserData().assignedDistrict
+          && (!('assignedSubCounty' in getUserData())
+            || getUserData().assignedSubCounty == ''
+            || question.subCounty == getUserData().assignedSubCounty))
+      );
+    }
+
     function isFarmer() {
       return hasRole('FARMER');
     }
@@ -258,6 +270,12 @@ service cloud.firestore {
       allow delete: if isAdmin() && priceId == 'uganda-coffee';
     }
 
+    // Historical UCDA snapshots are written only by the trusted price-feed function.
+    match /marketPriceHistory/{dateId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     // Weather Snapshots: Readable by verified users for regional caching; write by backend
     match /weatherSnapshots/{snapId} {
       allow read: if isEmailVerified();
@@ -305,13 +323,17 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // Shared coffee help room. Verified users can read and participate.
+    // Private farmer conversations are visible to the owner and assigned regional support.
     match /helpQuestions/{questionId} {
-      allow read: if isEmailVerified();
+      allow read: if canReadHelpQuestion(resource.data);
       allow create: if isFarmer()
-        && request.resource.data.keys().hasOnly(['farmerId', 'farmerName', 'district', 'subCounty', 'category', 'title', 'message', 'lastMessage', 'createdAt', 'lastMessageAt'])
+        && request.resource.data.keys().hasOnly(['farmerId', 'farmerName', 'farmId', 'district', 'subCounty', 'category', 'title', 'message', 'lastMessage', 'createdAt', 'lastMessageAt'])
         && request.resource.data.farmerId == request.auth.uid
         && request.resource.data.farmerName == getUserData().fullName
+        && request.resource.data.farmId is string
+        && get(/databases/$(database)/documents/farms/$(request.resource.data.farmId)).data.farmerId == request.auth.uid
+        && request.resource.data.district == get(/databases/$(database)/documents/farms/$(request.resource.data.farmId)).data.district
+        && request.resource.data.subCounty == get(/databases/$(database)/documents/farms/$(request.resource.data.farmId)).data.subCounty
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 140
@@ -323,6 +345,7 @@ service cloud.firestore {
         && request.resource.data.category in ['bctb_signs', 'pruning', 'shade', 'weather']
         && request.resource.data.createdAt is int;
       allow update: if isEmailVerified()
+        && canReadHelpQuestion(resource.data)
         && (canAnswerHelpRoom() || (isFarmer() && resource.data.farmerId == request.auth.uid))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt'])
         && request.resource.data.lastMessage is string
@@ -332,8 +355,9 @@ service cloud.firestore {
       allow delete: if false;
 
       match /replies/{replyId} {
-        allow read: if isEmailVerified();
+        allow read: if canReadHelpQuestion(get(/databases/$(database)/documents/helpQuestions/$(questionId)).data);
         allow create: if isEmailVerified()
+          && canReadHelpQuestion(get(/databases/$(database)/documents/helpQuestions/$(questionId)).data)
           && (canAnswerHelpRoom() || request.auth.uid == get(/databases/$(database)/documents/helpQuestions/$(questionId)).data.farmerId)
           && request.resource.data.keys().hasOnly(['responderId', 'responderName', 'responderRole', 'message', 'createdAt'])
           && request.resource.data.responderId == request.auth.uid

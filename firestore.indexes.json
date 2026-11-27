@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "helpQuestions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "district", "order": "ASCENDING" },
+        { "fieldPath": "subCounty", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

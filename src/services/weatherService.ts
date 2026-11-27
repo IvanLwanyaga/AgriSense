@@ -5,7 +5,6 @@ import type {
   FarmWeatherSummary,
   HourlyForecastItem,
 } from "../types/weather";
-import { authenticatedFetch } from "./authenticatedFetch";
 
 // Standard WMO Weather interpretation codes
 function decodeWeatherCode(code: number): string {
@@ -243,22 +242,35 @@ export async function fetchBctbWeatherMetrics(
   district = "Wakiso",
   _subCounty?: string
 ): Promise<import("../types/bctb").WeatherMetrics> {
-  const cacheKey = `agrisense_bctb_wx_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
+  const cacheKey = `agrisense_bctb_wx_${latitude.toFixed(4)}_${longitude.toFixed(4)}`;
   try {
-    const response = await authenticatedFetch("/api/getWeatherSnapshot", {
-      method: "POST",
-      body: JSON.stringify({ latitude, longitude, district }),
-    });
-    const payload = await response.json().catch(() => ({})) as {
-      snapshot?: import("../types/bctb").WeatherMetrics;
-      error?: string;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&past_days=30&forecast_days=0&daily=precipitation_sum,temperature_2m_mean&timezone=Africa%2FKampala`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Weather service returned HTTP ${response.status}.`);
+    const payload = await response.json() as {
+      daily?: { precipitation_sum?: Array<number | null>; temperature_2m_mean?: Array<number | null> };
     };
-    if (!response.ok || !payload.snapshot) {
-      throw new Error(payload.error || `Weather service returned HTTP ${response.status}.`);
-    }
-
-    localStorage.setItem(cacheKey, JSON.stringify(payload.snapshot));
-    return payload.snapshot;
+    const rain = (payload.daily?.precipitation_sum || []).slice(-30).map((value) => value ?? 0);
+    const recentTemperatureValues = (payload.daily?.temperature_2m_mean || []).slice(-30);
+    const temperatures = recentTemperatureValues.filter((value): value is number => typeof value === "number");
+    const temperatures7 = recentTemperatureValues.slice(-7).filter((value): value is number => typeof value === "number");
+    if (rain.length === 0 || temperatures.length === 0) throw new Error("No recent weather data was returned for this farm location.");
+    const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+    let drySpellDays = 0;
+    for (let index = rain.length - 1; index >= 0 && rain[index] < 1; index -= 1) drySpellDays += 1;
+    const snapshot: import("../types/bctb").WeatherMetrics = {
+      cumulativeRainfall7dMm: Math.round(sum(rain.slice(-7)) * 10) / 10,
+      cumulativeRainfall14dMm: Math.round(sum(rain.slice(-14)) * 10) / 10,
+      cumulativeRainfall30dMm: Math.round(sum(rain) * 10) / 10,
+      tempAvg7dC: Number((sum(temperatures7) / Math.max(temperatures7.length, 1)).toFixed(1)),
+      tempAvg30dC: Number((sum(temperatures) / Math.max(temperatures.length, 1)).toFixed(1)),
+      consecutiveDrySpellDays: drySpellDays,
+      provider: `Open-Meteo - ${district}`,
+      retrievedAt: new Date().toISOString(),
+      granularity: "EXACT_COORDINATES",
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(snapshot));
+    return snapshot;
   } catch (err) {
     console.warn("BCTB live weather request failed; checking for a saved snapshot.", err);
     try {
