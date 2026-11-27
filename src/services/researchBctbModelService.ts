@@ -12,9 +12,14 @@ const MODEL_STARTUP_RETRIES = 8;
 const MODEL_STARTUP_RETRY_DELAY_MS = 10_000;
 
 class ModelRequestError extends Error {
-  constructor(message: string, readonly status: number, readonly retryAfterMs = 0) {
+  readonly status: number;
+  readonly retryAfterMs: number;
+
+  constructor(message: string, status: number, retryAfterMs = 0) {
     super(message);
     this.name = "ModelRequestError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

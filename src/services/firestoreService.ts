@@ -154,6 +154,10 @@ export async function createFarm(
     coordinateSource?: "GOOGLE_PLACES" | "GPS" | "DISTRICT_CENTROID";
   }
 ): Promise<Farm> {
+  const granularity: NonNullable<Farm["location"]["granularity"]> =
+    additional?.coordinateSource === "GOOGLE_PLACES" && !additional?.village
+      ? "SUBCOUNTY_CENTROID"
+      : "EXACT";
   const farmData = {
     farmerId,
     organizationId: organizationId || null,
@@ -165,9 +169,7 @@ export async function createFarm(
       district,
       subCounty,
       country: "Uganda",
-      granularity: additional?.coordinateSource === "GOOGLE_PLACES" && !additional?.village
-        ? "SUBCOUNTY_CENTROID"
-        : "EXACT",
+      granularity,
       ...(additional?.coordinateSource === "GOOGLE_PLACES" || additional?.coordinateSource === "GPS"
         ? { coordinateSource: additional.coordinateSource }
         : {}),

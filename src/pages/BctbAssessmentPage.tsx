@@ -30,6 +30,14 @@ import type {
 type Mode = "GUIDED" | "EXPERT";
 const MODE_KEY = "agrisense_bctb_form_mode";
 
+function getAssessmentCoffeeVariety(
+  variety: Farm["coffeeVariety"],
+  fallback: BctbAssessmentInput["coffeeVariety"],
+): BctbAssessmentInput["coffeeVariety"] {
+  if (variety === "ARABICA") return null;
+  return variety ?? fallback;
+}
+
 function getLocalizedCopy(_mode: Mode, t: ReturnType<typeof useLanguage>["t"]) {
   return {
     dieback: {
@@ -465,7 +473,7 @@ export default function BctbAssessmentPage({
       farmId: selectedFarm.id,
       district: selectedFarm.district,
       subCounty: selectedFarm.subCounty,
-      coffeeVariety: selectedFarm.coffeeVariety ?? current.coffeeVariety,
+      coffeeVariety: getAssessmentCoffeeVariety(selectedFarm.coffeeVariety, current.coffeeVariety),
       coffeeAge: selectedFarm.coffeeAge ?? current.coffeeAge,
       shadeCanopy: selectedFarm.shadeCanopy ?? current.shadeCanopy,
     }));
@@ -1053,7 +1061,7 @@ export default function BctbAssessmentPage({
                   setFarmWeatherLoading(true);
                   setFarmWeatherStatus("Loading the previous 30 days of weather for this farm location…");
                   dirty.current = true;
-                  setAssessment((current) => ({ ...current, farmId: nextFarm.id, district: nextFarm.district, subCounty: nextFarm.subCounty, coffeeVariety: nextFarm.coffeeVariety ?? current.coffeeVariety, coffeeAge: nextFarm.coffeeAge ?? current.coffeeAge, shadeCanopy: nextFarm.shadeCanopy ?? current.shadeCanopy }));
+                  setAssessment((current) => ({ ...current, farmId: nextFarm.id, district: nextFarm.district, subCounty: nextFarm.subCounty, coffeeVariety: getAssessmentCoffeeVariety(nextFarm.coffeeVariety, current.coffeeVariety), coffeeAge: nextFarm.coffeeAge ?? current.coffeeAge, shadeCanopy: nextFarm.shadeCanopy ?? current.shadeCanopy }));
                 }
               }} required disabled={farms.length === 0}>
                 {farms.length === 0 ? <option value="">Register a farm before screening</option> : farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name} — {[farm.village, farm.subCounty, farm.district].filter(Boolean).join(", ")}</option>)}
