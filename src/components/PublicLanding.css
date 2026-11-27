@@ -249,6 +249,63 @@
   gap: 13px;
 }
 
+.landing-access-qr {
+  display: inline-flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 22px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 12px;
+  background: rgba(10,34,25,.58);
+  backdrop-filter: blur(10px);
+}
+
+.landing-access-qr img {
+  display: block;
+  width: 92px;
+  height: 92px;
+  border: 5px solid white;
+  border-radius: 6px;
+  background: white;
+}
+
+.landing-access-qr > div {
+  display: flex;
+  max-width: 250px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.landing-access-qr-kicker {
+  color: #c5dfb5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.landing-access-qr strong {
+  color: white;
+  font-size: 13px;
+}
+
+.landing-access-qr a {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: rgba(255,255,255,.76);
+  font-size: 10px;
+}
+
+.landing-access-qr .landing-access-qr-download {
+  margin-top: 3px;
+  color: #dce9cf;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .landing-primary,
 .landing-secondary {
   display: inline-flex;
@@ -1350,6 +1407,22 @@
   .landing-ctas {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .landing-access-qr {
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 8px;
+    gap: 10px;
+  }
+
+  .landing-access-qr img {
+    width: 76px;
+    height: 76px;
+  }
+
+  .landing-access-qr > div {
+    max-width: calc(100% - 86px);
   }
 
   .landing-primary,

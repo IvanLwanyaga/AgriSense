@@ -1,5 +1,6 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
+import QRCode from "qrcode";
 import "./PublicLanding.css";
 
 const coffeeImages = [
@@ -80,6 +81,21 @@ export default function PublicLanding({
   const [activeImage, setActiveImage] = useState(0);
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [appQrCode, setAppQrCode] = useState("");
+  const [appUrl, setAppUrl] = useState("");
+
+  useEffect(() => {
+    const url = `${window.location.origin}/`;
+    setAppUrl(url);
+    void QRCode.toDataURL(url, {
+      width: 192,
+      margin: 1,
+      errorCorrectionLevel: "H",
+      color: { dark: "#173b2d", light: "#ffffff" },
+    }).then(setAppQrCode).catch((error: unknown) => {
+      console.error("Could not generate the AgriSense access QR code.", error);
+    });
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -207,6 +223,16 @@ export default function PublicLanding({
                 Watch field demo
               </button>
             </div>
+
+            {appQrCode && <div className="landing-access-qr">
+              <img src={appQrCode} alt="QR code to open the AgriSense system" />
+              <div>
+                <span className="landing-access-qr-kicker">PANELIST ACCESS</span>
+                <strong>Scan to open AgriSense</strong>
+                <a href={appUrl} target="_blank" rel="noreferrer">{appUrl}</a>
+                <a className="landing-access-qr-download" href={appQrCode} download="agrisense-access-qr.png">Download QR code</a>
+              </div>
+            </div>}
 
             <div className="landing-trust">
               <span>✳</span>
