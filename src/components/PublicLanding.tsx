@@ -152,16 +152,17 @@ export default function PublicLanding({
           <button
             className="mobile-menu-toggle"
             type="button"
-            aria-label="Toggle navigation"
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-controls="landing-navigation-links"
             aria-expanded={mobileMenuOpen}
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={() => setMobileMenuOpen((open) => !open)}
           >
-            <span />
-            <span />
-            <span />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
           </button>
 
-          <div className={`landing-nav-links ${mobileMenuOpen ? "mobile-open" : ""}`}>
+          <div id="landing-navigation-links" className={`landing-nav-links ${mobileMenuOpen ? "mobile-open" : ""}`}>
             <a href="#platform" onClick={closeMenu}>Platform</a>
             <a href="#how-it-works" onClick={closeMenu}>How it works</a>
             <a href="#about" onClick={closeMenu}>About</a>

@@ -1226,7 +1226,7 @@
     font-size: 18px;
   }
 
-  .mobile-menu-toggle {
+  .public-site .mobile-menu-toggle {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -1237,6 +1237,10 @@
     border: 1px solid rgba(255,255,255,.3);
     border-radius: 8px;
     background: rgba(255,255,255,.08);
+    position: relative;
+    z-index: 20;
+    cursor: pointer;
+    touch-action: manipulation;
   }
 
   .mobile-menu-toggle span {
@@ -1247,7 +1251,7 @@
     background: white;
   }
 
-  .landing-nav-links {
+  .public-site .landing-nav-links {
     position: absolute;
     top: 66px;
     right: 0;
@@ -1261,14 +1265,17 @@
     border-radius: 12px;
     background: #173b2d;
     box-shadow: 0 20px 45px rgba(0,0,0,.3);
+    z-index: 19;
   }
 
-  .landing-nav-links.mobile-open {
+  .public-site .landing-nav-links.mobile-open {
     display: flex;
   }
 
-  .landing-nav-links > a,
-  .landing-nav-links > button {
+  .public-site .landing-nav-links.mobile-open > a,
+  .public-site .landing-nav-links.mobile-open > button {
+    display: block;
+    width: 100%;
     padding: 13px;
     text-align: left;
   }
