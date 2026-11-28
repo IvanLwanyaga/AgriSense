@@ -227,8 +227,8 @@ export default function PublicLanding({
             {appQrCode && <div className="landing-access-qr">
               <img src={appQrCode} alt="QR code to open the AgriSense system" />
               <div>
-                <span className="landing-access-qr-kicker">PANELIST ACCESS</span>
-                <strong>Scan to open AgriSense</strong>
+                <span className="landing-access-qr-kicker">AGRISENSE PLATFORM</span>
+                <strong>Scan to access the system</strong>
                 <a href={appUrl} target="_blank" rel="noreferrer">{appUrl}</a>
                 <a className="landing-access-qr-download" href={appQrCode} download="agrisense-access-qr.png">Download QR code</a>
               </div>
