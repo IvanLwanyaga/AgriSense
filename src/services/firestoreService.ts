@@ -1,11 +1,11 @@
 import {
-  addDoc,
   arrayUnion,
   collection,
   doc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -56,6 +56,14 @@ function saveCachedFields(fields: Field[], userId: string): void {
   }
 }
 
+function isNetworkUnavailable(error: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return ["unavailable", "deadline-exceeded", "network-request-failed"].includes(
+    String((error as { code: unknown }).code),
+  );
+}
+
 /**
  * Get all farms accessible to the user:
  * Either by organizationId (cooperative members) or farmerId (standalone smallholders).
@@ -81,7 +89,7 @@ export async function getFarms(
     saveCachedFarms(farms, userId);
     return farms;
   } catch (error) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    if (isNetworkUnavailable(error)) {
       return getCachedFarms(userId);
     }
     console.error("Farm records could not be loaded from Firestore.", error);
@@ -195,15 +203,20 @@ export async function createFarm(
   };
 
   try {
-    const docRef = await addDoc(collection(db, "farms"), {
+    const farmRef = doc(collection(db, "farms"));
+    const createdFarm: Farm = { id: farmRef.id, ...farmData };
+    const write = setDoc(farmRef, {
       ...farmData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    const createdFarm: Farm = { id: docRef.id, ...farmData };
-    const cached = getCachedFarms(farmerId);
-    cached.unshift(createdFarm);
-    saveCachedFarms(cached, farmerId);
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      saveCachedFarms([createdFarm, ...getCachedFarms(farmerId)], farmerId);
+      void write.catch((err) => console.error("Queued farm could not sync after reconnecting.", err));
+      return createdFarm;
+    }
+    await write;
+    saveCachedFarms([createdFarm, ...getCachedFarms(farmerId)], farmerId);
     return createdFarm;
   } catch (err) {
     console.error("Farm creation failed in Firestore.", err);
@@ -213,7 +226,14 @@ export async function createFarm(
 
 export async function deleteFarm(farmId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, "farms", farmId));
+    const write = deleteDoc(doc(db, "farms", farmId));
+    const userId = auth.currentUser?.uid;
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (userId) saveCachedFarms(getCachedFarms(userId).filter((farm) => farm.id !== farmId), userId);
+      void write.catch((err) => console.error("Queued farm deletion could not sync after reconnecting.", err));
+      return;
+    }
+    await write;
   } catch (err) {
     console.error("Farm deletion failed in Firestore.", err);
     throw new Error("Farm was not deleted from the shared system. Check your connection and try again.", { cause: err });
@@ -262,12 +282,17 @@ export async function saveFarmBoundary(
   };
 
   try {
-    await updateDoc(doc(db, "farms", farm.id), {
+    const write = updateDoc(doc(db, "farms", farm.id), {
       boundary: points,
       passportAudit: arrayUnion(auditEntry),
       passportUpdatedAt: serverTimestamp(),
       boundaryAreaHectares: areaHectares,
     });
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      void write.catch((error) => console.error("Queued farm boundary could not sync after reconnecting.", error));
+      return;
+    }
+    await write;
   } catch (error) {
     console.error("Farm passport boundary could not be saved.", error);
     throw new Error("Farm boundary was not saved. Check your connection and account permissions.", { cause: error });
@@ -278,10 +303,15 @@ export async function setCurrentUserSmsConsent(consent: boolean): Promise<void> 
   const userId = auth.currentUser?.uid;
   if (!userId) throw new Error("Sign in to update SMS notification consent.");
   try {
-    await updateDoc(doc(db, "users", userId), {
+    const write = updateDoc(doc(db, "users", userId), {
       smsConsent: consent,
       updatedAt: serverTimestamp(),
     });
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      void write.catch((error) => console.error("Queued SMS consent could not sync after reconnecting.", error));
+      return;
+    }
+    await write;
   } catch (error) {
     console.error("SMS notification consent could not be updated.", error);
     throw new Error("Your SMS consent preference could not be saved.", { cause: error });
@@ -301,7 +331,7 @@ export async function getFields(farmId: string): Promise<Field[]> {
     saveCachedFields(fields, userId);
     return fields;
   } catch (err) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    if (isNetworkUnavailable(err)) {
       return getCachedFields(userId).filter((field) => field.farmId === farmId);
     }
     console.error("Field records could not be loaded from Firestore.", err);
@@ -344,15 +374,20 @@ export async function createField(
   };
 
   try {
-    const docRef = await addDoc(collection(db, "fields"), {
+    const fieldRef = doc(collection(db, "fields"));
+    const newField: Field = { id: fieldRef.id, ...fieldData };
+    const write = setDoc(fieldRef, {
       ...fieldData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    const newField: Field = { id: docRef.id, ...fieldData };
-    const cached = getCachedFields(farmerId);
-    cached.unshift(newField);
-    saveCachedFields(cached, farmerId);
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      saveCachedFields([newField, ...getCachedFields(farmerId)], farmerId);
+      void write.catch((err) => console.error("Queued field could not sync after reconnecting.", err));
+      return newField;
+    }
+    await write;
+    saveCachedFields([newField, ...getCachedFields(farmerId)], farmerId);
     return newField;
   } catch (err) {
     console.error("Field creation failed in Firestore.", err);

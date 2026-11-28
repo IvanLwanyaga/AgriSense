@@ -11,6 +11,7 @@ import { getFarms } from "../services/firestoreService";
 import { fetchBctbWeatherMetrics } from "../services/weatherService";
 import type { Farm } from "../types/farm";
 import { predictResearchBctbRisk } from "../services/researchBctbModelService";
+import { buildLocalResearchPredictionFromInputs } from "../services/localBctbPrediction";
 import { queueResearchPrediction } from "../services/offlineSyncService";
 import { sendRealSmsAlert } from "../services/smsService";
 import { getResearchPredictionQueue } from "../services/storage/indexedDbService";
@@ -740,10 +741,12 @@ export default function BctbAssessmentPage({
     async function saveForSync() {
       if (!user?.uid) throw new Error("Sign in before saving a screening for later synchronization.");
       const item = await queueResearchPrediction(user.uid, modelInputs!);
-      saveResearchScreeningEntry(user.uid, assessment, modelInputs!, undefined, item.id);
+      const localPrediction = buildLocalResearchPredictionFromInputs(modelInputs!, language);
+      saveResearchScreeningEntry(user.uid, assessment, modelInputs!, localPrediction, item.id);
       setVisitJournal(getResearchScreeningJournal(user.uid));
-      setResult(null);
-      setOfflineQueued(`Screening saved on this device. It will be sent automatically when the network returns (queue ${item.id}).`);
+      setResult(localPrediction);
+      onResult?.(localPrediction);
+      setOfflineQueued(`Screening saved on this device. This is a local rule-based estimate; the trained model will run when the network returns (queue ${item.id}).`);
     }
     try {
       if (!navigator.onLine) {

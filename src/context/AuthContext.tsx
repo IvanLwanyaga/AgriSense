@@ -82,6 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }, (error) => {
         console.warn("Unable to load the user profile from Firestore.", error);
+        try {
+          const cached = localStorage.getItem("agrisense_current_profile");
+          const cachedProfile = cached ? JSON.parse(cached) as UserProfile : null;
+          if (cachedProfile?.uid === currentUser.uid) {
+            setProfile(cachedProfile);
+          }
+        } catch (cacheError) {
+          console.warn("Unable to restore the saved offline profile.", cacheError);
+        }
         setLoading(false);
       });
     });

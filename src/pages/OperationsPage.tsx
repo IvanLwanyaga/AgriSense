@@ -14,7 +14,7 @@ const settingTabs: Array<{ id: SettingsSection; icon: string; label: string }> =
 ];
 
 function loadPreferences(userId?: string) {
-  const defaults = { criticalAlerts: true, weatherAlerts: true, extensionFollowUp: true, offlineCache: true, timezone: "Africa/Kampala" };
+  const defaults = { criticalAlerts: true, weatherAlerts: true, extensionFollowUp: true, timezone: "Africa/Kampala" };
   if (!userId) return defaults;
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(`agrisense_preferences_${userId}`) || "{}") };
@@ -31,7 +31,6 @@ export function SettingsPage() {
   const [criticalAlerts, setCriticalAlerts] = useState(initialPreferences.criticalAlerts);
   const [weatherAlerts, setWeatherAlerts] = useState(initialPreferences.weatherAlerts);
   const [extensionFollowUp, setExtensionFollowUp] = useState(initialPreferences.extensionFollowUp);
-  const [offlineCache, setOfflineCache] = useState(initialPreferences.offlineCache);
   const [saved, setSaved] = useState(false);
   const [timezone, setTimezone] = useState(initialPreferences.timezone);
   const [smsConsent, setSmsConsent] = useState(Boolean(profile?.smsConsent));
@@ -39,7 +38,7 @@ export function SettingsPage() {
 
   function handleSave() {
     const key = `agrisense_preferences_${user?.uid ?? "guest"}`;
-    localStorage.setItem(key, JSON.stringify({ criticalAlerts, weatherAlerts, extensionFollowUp, offlineCache, timezone }));
+    localStorage.setItem(key, JSON.stringify({ criticalAlerts, weatherAlerts, extensionFollowUp, timezone }));
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2200);
   }
@@ -104,9 +103,10 @@ export function SettingsPage() {
 
           {activeSection === "offline" && (
             <div className="settings-section">
-              <div><h3>Data & Offline Cache</h3><p>Control local access to your recent field work on this device.</p></div>
-              <PreferenceToggle title="Keep recent field data available offline" description="Retain recent assessment drafts and farm details in this browser for low-connectivity use." checked={offlineCache} onChange={setOfflineCache} />
-              <div className="settings-info-card"><strong>Stored on this device</strong><p>Assessment drafts and preferences are kept in this browser. They are not a substitute for a saved account record.</p></div>
+              <div><h3>Data & Offline Cache</h3><p>Recent records and unsent field work stay on this device until they can sync.</p></div>
+              <div className="settings-info-card"><strong>Offline-ready storage is active</strong><p>After the app has loaded online, cached farm records, assessment drafts and queued screenings can be opened or completed offline. Changes sync when the connection returns.</p></div>
+              <div className="settings-info-card"><strong>Use a trusted device</strong><p>Offline records are stored in this browser. Avoid shared phones, and do not clear browser data while work is waiting to sync.</p></div>
+              <div className="settings-info-card"><strong>Install for field use</strong><p>While online, use your browser menu to add AgriSense to your home screen. Open it once online before travelling to an area without coverage.</p></div>
             </div>
           )}
 

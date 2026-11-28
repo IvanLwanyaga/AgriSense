@@ -1,6 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 
 const useFirebaseEmulators = import.meta.env.DEV
@@ -29,7 +34,11 @@ if (missingConfig.length > 0) {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Keep previously read farmer data and queued Firestore writes available across
+// reloads while offline. The multi-tab manager keeps browser tabs in sync.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const storage = getStorage(app);
 
 if (useFirebaseEmulators) {

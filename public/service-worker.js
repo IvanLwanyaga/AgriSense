@@ -1,4 +1,4 @@
-const CACHE_NAME = "agrisense-shell-v3";
+const CACHE_NAME = "agrisense-shell-v4";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/favicon.svg", "/icons.svg"];
 
 self.addEventListener("install", (event) => {
@@ -55,16 +55,28 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then((response) => {
-      if (response.ok) void caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", response.clone()));
+    event.respondWith(fetch(request).then(async (response) => {
+      if (response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put("/index.html", response.clone());
+      }
       return response;
     }).catch(async () => (await caches.match("/index.html")) || (await caches.match("/"))));
     return;
   }
-  if (url.pathname.startsWith("/assets/")) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+  const cacheableStaticFile = url.pathname.startsWith("/assets/")
+    || url.pathname.startsWith("/images/")
+    || /\.(?:svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname);
+  if (cacheableStaticFile) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok && response.type === "basic") {
+        await cache.put(request, response.clone());
+      }
       return response;
-    })));
+    })());
   }
 });

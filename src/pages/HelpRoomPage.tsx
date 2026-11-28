@@ -7,6 +7,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  setDoc,
   type QueryConstraint,
   where,
   writeBatch,
@@ -65,6 +66,7 @@ export default function HelpRoomPage() {
   const [message, setMessage] = useState("");
   const [replyText, setReplyText] = useState("");
   const [error, setError] = useState("");
+  const [offlineNotice, setOfflineNotice] = useState("");
   const [sending, setSending] = useState(false);
   const [showNewConversation, setShowNewConversation] = useState(false);
   const [mobileThread, setMobileThread] = useState(false);
@@ -170,10 +172,12 @@ export default function HelpRoomPage() {
     }
     setSending(true);
     setError("");
+    setOfflineNotice("");
     try {
       const firstMessage = message.trim().slice(0, 3000);
       const createdAt = Date.now();
-      const posted = await addDoc(collection(db, "helpQuestions"), {
+      const questionRef = doc(collection(db, "helpQuestions"));
+      const questionData = {
         farmerId: user.uid,
         farmerName: profile.fullName,
         farmId: selectedFarm.id,
@@ -185,6 +189,24 @@ export default function HelpRoomPage() {
         lastMessage: firstMessage,
         createdAt,
         lastMessageAt: createdAt,
+      };
+      if (!navigator.onLine) {
+        const localQuestion: HelpQuestion = { id: questionRef.id, ...questionData };
+        void setDoc(questionRef, questionData).catch((cause: unknown) => {
+          console.error("Offline help inquiry could not sync after reconnecting.", cause);
+          setError("This inquiry is saved on this device, but could not sync. Check your connection and try again.");
+        });
+        setQuestions((current) => [localQuestion, ...current.filter((item) => item.id !== localQuestion.id)]);
+        setSelectedId(localQuestion.id);
+        setMobileThread(true);
+        setTitle("");
+        setMessage("");
+        setShowNewConversation(false);
+        setOfflineNotice("Inquiry saved on this device. It will sync when the internet connection returns.");
+        return;
+      }
+      const posted = await addDoc(collection(db, "helpQuestions"), {
+        ...questionData,
       });
       setTitle("");
       setMessage("");
@@ -209,6 +231,7 @@ export default function HelpRoomPage() {
     if (!user || !profile || !selected || !replyText.trim() || !canReply || sending) return;
     setSending(true);
     setError("");
+    setOfflineNotice("");
     try {
       const body = replyText.trim().slice(0, 3000);
       const sentAt = Date.now();
@@ -225,6 +248,15 @@ export default function HelpRoomPage() {
         lastMessage: body,
         lastMessageAt: sentAt,
       });
+      if (!navigator.onLine) {
+        void batch.commit().catch((cause: unknown) => {
+          console.error("Offline help reply could not sync after reconnecting.", cause);
+          setError("Your reply is saved on this device, but could not sync. Check your connection and try again.");
+        });
+        setOfflineNotice("Reply saved on this device. It will sync when the internet connection returns.");
+        setReplyText("");
+        return;
+      }
       await batch.commit();
       setReplyText("");
     } catch (cause) {
@@ -256,6 +288,7 @@ export default function HelpRoomPage() {
       </header>
 
       {error && !showNewConversation && <p className="form-error" role="alert">{error}</p>}
+      {offlineNotice && <p className="form-success" role="status">{offlineNotice}</p>}
 
       <div className="help-room-layout">
         <aside className={`panel help-question-list ${mobileThread ? "mobile-hidden" : ""}`}>
